@@ -1,0 +1,306 @@
+# SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+# list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+#
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from
+# this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# Copyright (c) 2021 ETH Zurich, Nikita Rudin
+
+import os
+import copy
+import torch
+import numpy as np
+import random
+from isaacgym import gymapi
+from isaacgym import gymutil
+
+from legged_gym import LEGGED_GYM_ROOT_DIR, LEGGED_GYM_ENVS_DIR
+from legged_gym.envs.go2.go2_config import Go2RoughCfg
+
+def class_to_dict(obj) -> dict:
+    if not  hasattr(obj,"__dict__"):
+        return obj
+    result = {}
+    for key in dir(obj):
+        if key.startswith("_"):
+            continue
+        element = []
+        val = getattr(obj, key)
+        if isinstance(val, list):
+            for item in val:
+                element.append(class_to_dict(item))
+        else:
+            element = class_to_dict(val)
+        result[key] = element
+    return result
+
+def update_class_from_dict(obj, dict):
+    for key, val in dict.items():
+        attr = getattr(obj, key, None)
+        if isinstance(attr, type):
+            update_class_from_dict(attr, val)
+        else:
+            setattr(obj, key, val)
+    return
+
+def set_seed(seed):
+    if seed == -1:
+        seed = np.random.randint(0, 10000)
+    print("Setting seed: {}".format(seed))
+    
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+def parse_sim_params(args, cfg):
+    # code from Isaac Gym Preview 2
+    # initialize sim params
+    sim_params = gymapi.SimParams()
+
+    # set some values from args
+    if args.physics_engine == gymapi.SIM_FLEX:
+        if args.device != "cpu":
+            print("WARNING: Using Flex with GPU instead of PHYSX!")
+    elif args.physics_engine == gymapi.SIM_PHYSX:
+        sim_params.physx.use_gpu = args.use_gpu
+        sim_params.physx.num_subscenes = args.subscenes
+    sim_params.use_gpu_pipeline = args.use_gpu_pipeline
+
+    # if sim options are provided in cfg, parse them and update/override above:
+    if "sim" in cfg:
+        gymutil.parse_sim_config(cfg["sim"], sim_params)
+
+    # Override num_threads if passed on the command line
+    if args.physics_engine == gymapi.SIM_PHYSX and args.num_threads > 0:
+        sim_params.physx.num_threads = args.num_threads
+
+    return sim_params
+
+def get_load_path(root, load_run=-1, checkpoint=-1):
+    try:
+        runs = os.listdir(root)
+        #TODO sort by date to handle change of month
+        runs.sort()
+        if 'exported' in runs: runs.remove('exported')
+        last_run = os.path.join(root, runs[-1])
+    except:
+        raise ValueError("No runs in this directory: " + root)
+    if load_run==-1:
+        load_run = last_run
+    else:
+        load_run = os.path.join(root, load_run)
+
+    if checkpoint==-1:
+        models = [file for file in os.listdir(load_run) if 'model' in file]
+        models.sort(key=lambda m: '{0:0>15}'.format(m))
+        model = models[-1]
+    else:
+        model = "model_{}.pt".format(checkpoint) 
+
+    load_path = os.path.join(load_run, model)
+    return load_path
+
+def update_cfg_from_args(env_cfg, cfg_train, args):
+    # seed
+    # print("-----------------------------------")
+    # print("env_cfg: ", env_cfg)
+    # print("-----------------------------------")
+    # print("cfg_train: ", cfg_train)
+    # print("-----------------------------------")
+    if env_cfg is not None:
+        # num envs
+        if args.num_envs is not None:
+            env_cfg.env.num_envs = args.num_envs
+
+        # 更新奖励函数的具体参数
+        if args.termination is not None:
+            env_cfg.rewards.scales.termination = args.termination
+        if args.tracking_lin_vel is not None:
+            env_cfg.rewards.scales.tracking_lin_vel = args.tracking_lin_vel
+        if args.tracking_ang_vel is not None:
+            env_cfg.rewards.scales.tracking_ang_vel = args.tracking_ang_vel
+        if args.lin_vel_z is not None:
+            env_cfg.rewards.scales.lin_vel_z = args.lin_vel_z
+        if args.ang_vel_xy is not None:
+            env_cfg.rewards.scales.ang_vel_xy = args.ang_vel_xy
+        if args.orientation is not None:
+            env_cfg.rewards.scales.orientation = args.orientation
+        if args.torques is not None:
+            env_cfg.rewards.scales.torques = args.torques
+        if args.dof_vel is not None:
+            env_cfg.rewards.scales.dof_vel = args.dof_vel
+        if args.dof_acc is not None:
+            env_cfg.rewards.scales.dof_acc = args.dof_acc
+        if args.base_height is not None:
+            env_cfg.rewards.scales.base_height = args.base_height
+        if args.feet_air_time is not None:
+            env_cfg.rewards.scales.feet_air_time = args.feet_air_time
+        if args.collision is not None:
+            env_cfg.rewards.scales.collision = args.collision
+        if args.feet_stumble is not None:
+            env_cfg.rewards.scales.feet_stumble = args.feet_stumble
+        if args.action_rate is not None:
+            env_cfg.rewards.scales.action_rate = args.action_rate
+        if args.stand_still is not None:
+            env_cfg.rewards.scales.stand_still = args.stand_still
+        if args.dof_pos_limits is not None:
+            env_cfg.rewards.scales.dof_pos_limits = args.dof_pos_limits
+        if args.base_height_target is not None:
+            env_cfg.rewards.base_height_target = args.base_height_target
+
+
+        # print("-----------------------------------")
+        # print("termination: ", env_cfg.rewards.scales.termination)
+        # print("tracking_lin_vel: ", env_cfg.rewards.scales.tracking_lin_vel)
+        # print("tracking_ang_vel: ", env_cfg.rewards.scales.tracking_ang_vel)
+        # print("lin_vel_z: ", env_cfg.rewards.scales.lin_vel_z)
+        # print("ang_vel_xy: ", env_cfg.rewards.scales.ang_vel_xy)
+        # print("orientation: ", env_cfg.rewards.scales.orientation)
+        # print("torques: ", env_cfg.rewards.scales.torques)
+        # print("dof_vel: ", env_cfg.rewards.scales.dof_vel)
+        # print("dof_acc: ", env_cfg.rewards.scales.dof_acc)
+        # print("base_height: ", env_cfg.rewards.scales.base_height)
+        # print("feet_air_time: ", env_cfg.rewards.scales.feet_air_time)
+        # print("collision: ", env_cfg.rewards.scales.collision)
+        # print("feet_stumble: ", env_cfg.rewards.scales.feet_stumble)
+        # print("action_rate: ", env_cfg.rewards.scales.action_rate)
+        # print("stand_still: ", env_cfg.rewards.scales.stand_still)
+        # print("dof_pos_limits: ", env_cfg.rewards.scales.dof_pos_limits)
+        # print("-----------------------------------")
+
+    if cfg_train is not None:
+        if args.seed is not None:
+            cfg_train.seed = args.seed
+        # alg runner parameters
+        if args.max_iterations is not None:
+            cfg_train.runner.max_iterations = args.max_iterations
+        if args.resume:
+            cfg_train.runner.resume = args.resume
+        if args.experiment_name is not None:
+            cfg_train.runner.experiment_name = args.experiment_name
+        if args.run_name is not None:
+            cfg_train.runner.run_name = args.run_name
+        if args.load_run is not None:
+            cfg_train.runner.load_run = args.load_run
+        if args.checkpoint is not None:
+            cfg_train.runner.checkpoint = args.checkpoint
+
+
+    return env_cfg, cfg_train
+
+def get_args():
+    custom_parameters = [
+        {"name": "--task", "type": str, "default": "anymal_c_flat", "help": "Resume training or start testing from a checkpoint. Overrides config file if provided."},
+        {"name": "--resume", "action": "store_true", "default": False,  "help": "Resume training from a checkpoint"},
+        {"name": "--experiment_name", "type": str,  "help": "Name of the experiment to run or load. Overrides config file if provided."},
+        {"name": "--run_name", "type": str,  "help": "Name of the run. Overrides config file if provided."},
+        {"name": "--load_run", "type": str,  "help": "Name of the run to load when resume=True. If -1: will load the last run. Overrides config file if provided."},
+        {"name": "--checkpoint", "type": int,  "help": "Saved model checkpoint number. If -1: will load the last checkpoint. Overrides config file if provided."},
+        
+        {"name": "--headless", "action": "store_true", "default": False, "help": "Force display off at all times"},
+        {"name": "--horovod", "action": "store_true", "default": False, "help": "Use horovod for multi-gpu training"},
+        {"name": "--rl_device", "type": str, "default": "cuda:0", "help": 'Device used by the RL algorithm, (cpu, gpu, cuda:0, cuda:1 etc..)'},
+        {"name": "--num_envs", "type": int, "help": "Number of environments to create. Overrides config file if provided."},
+        {"name": "--seed", "type": int, "help": "Random seed. Overrides config file if provided."},
+        {"name": "--max_iterations", "type": int, "help": "Maximum number of training iterations. Overrides config file if provided."},
+
+
+        {"name": "--termination", "type": float, "default": Go2RoughCfg.rewards.scales.termination, "help": "Reward for termination."},
+        {"name": "--tracking_lin_vel", "type": float, "default": Go2RoughCfg.rewards.scales.tracking_lin_vel, "help": "Reward for tracking linear velocity."},
+        {"name": "--tracking_ang_vel", "type": float, "default": Go2RoughCfg.rewards.scales.tracking_ang_vel, "help": "Reward for tracking angular velocity."},
+        {"name": "--lin_vel_z", "type": float, "default": Go2RoughCfg.rewards.scales.lin_vel_z, "help": "Reward for linear velocity in Z direction."},
+        {"name": "--ang_vel_xy", "type": float, "default": Go2RoughCfg.rewards.scales.ang_vel_xy, "help": "Reward for angular velocity in XY plane."},
+        {"name": "--orientation", "type": float, "default": Go2RoughCfg.rewards.scales.orientation, "help": "Reward for maintaining correct orientation."},
+        {"name": "--torques", "type": float, "default": Go2RoughCfg.rewards.scales.torques, "help": "Reward for minimizing torques."},
+        {"name": "--dof_vel", "type": float, "default": Go2RoughCfg.rewards.scales.dof_vel, "help": "Reward for minimizing DOF velocities."},
+        {"name": "--dof_acc", "type": float, "default": Go2RoughCfg.rewards.scales.dof_acc, "help": "Reward for minimizing DOF accelerations."},
+        {"name": "--base_height", "type": float, "default": Go2RoughCfg.rewards.scales.base_height, "help": "Reward for maintaining base height."},
+        {"name": "--feet_air_time", "type": float, "default": Go2RoughCfg.rewards.scales.feet_air_time, "help": "Reward for maximizing feet air time."},
+        {"name": "--collision", "type": float, "default": Go2RoughCfg.rewards.scales.collision, "help": "Penalty for collisions."},
+        {"name": "--feet_stumble", "type": float, "default": Go2RoughCfg.rewards.scales.feet_stumble, "help": "Penalty for feet stumbling."},
+        {"name": "--action_rate", "type": float, "default": Go2RoughCfg.rewards.scales.action_rate, "help": "Penalty for rapid changes in actions."},
+        {"name": "--stand_still", "type": float, "default": Go2RoughCfg.rewards.scales.stand_still, "help": "Penalty for motion when standing still."},
+        {"name": "--dof_pos_limits", "type": float, "default": Go2RoughCfg.rewards.scales.dof_pos_limits, "help": "Penalty for exceeding DOF position limits."},
+        {"name": "--base_height_target", "type": float, "default": Go2RoughCfg.rewards.base_height_target, "help": "Penalty for base height target."}
+
+
+    ]
+    # parse arguments
+    args = gymutil.parse_arguments(
+        description="RL Policy",
+        custom_parameters=custom_parameters)
+
+    # name allignment
+    args.sim_device_id = args.compute_device_id
+    args.sim_device = args.sim_device_type
+    if args.sim_device=='cuda':
+        args.sim_device += f":{args.sim_device_id}"
+    return args
+
+def export_policy_as_jit(actor_critic, path):
+    if hasattr(actor_critic, 'memory_a'):
+        # assumes LSTM: TODO add GRU
+        exporter = PolicyExporterLSTM(actor_critic)
+        exporter.export(path)
+    else: 
+        os.makedirs(path, exist_ok=True)
+        path = os.path.join(path, 'policy_1.pt')
+        model = copy.deepcopy(actor_critic.actor).to('cpu')
+        traced_script_module = torch.jit.script(model)
+        traced_script_module.save(path)
+
+
+class PolicyExporterLSTM(torch.nn.Module):
+    def __init__(self, actor_critic):
+        super().__init__()
+        self.actor = copy.deepcopy(actor_critic.actor)
+        self.is_recurrent = actor_critic.is_recurrent
+        self.memory = copy.deepcopy(actor_critic.memory_a.rnn)
+        self.memory.cpu()
+        self.register_buffer(f'hidden_state', torch.zeros(self.memory.num_layers, 1, self.memory.hidden_size))
+        self.register_buffer(f'cell_state', torch.zeros(self.memory.num_layers, 1, self.memory.hidden_size))
+
+    def forward(self, x):
+        out, (h, c) = self.memory(x.unsqueeze(0), (self.hidden_state, self.cell_state))
+        self.hidden_state[:] = h
+        self.cell_state[:] = c
+        return self.actor(out.squeeze(0))
+
+    @torch.jit.export
+    def reset_memory(self):
+        self.hidden_state[:] = 0.
+        self.cell_state[:] = 0.
+ 
+    def export(self, path):
+        os.makedirs(path, exist_ok=True)
+        path = os.path.join(path, 'policy_lstm_1.pt')
+        self.to('cpu')
+        traced_script_module = torch.jit.script(self)
+        traced_script_module.save(path)
+
+    
