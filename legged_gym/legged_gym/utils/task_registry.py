@@ -145,7 +145,6 @@ class TaskRegistry():
         
         train_cfg_dict = class_to_dict(train_cfg)
         runner = OnPolicyRunner(env, train_cfg_dict, log_dir, device=args.rl_device)
-        # print('log_dir:',log_dir)
         #save resume path before creating a new log_dir
         resume = train_cfg.runner.resume
         if resume:
@@ -153,7 +152,7 @@ class TaskRegistry():
             resume_path = get_load_path(log_root, load_run=train_cfg.runner.load_run, checkpoint=train_cfg.runner.checkpoint)
             print(f"Loading model from: {resume_path}")
             runner.load(resume_path)
-        return runner, train_cfg, log_dir
+        return runner, train_cfg
 
 # make global task registry
 task_registry = TaskRegistry()

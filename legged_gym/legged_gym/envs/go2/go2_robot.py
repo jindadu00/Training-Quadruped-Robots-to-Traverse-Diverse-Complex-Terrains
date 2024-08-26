@@ -57,7 +57,7 @@ class Go2Robot(LeggedRobot):
         """
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
-
+        self.gym.refresh_rigid_body_state_tensor(self.sim)
         self.episode_length_buf += 1
         self.common_step_counter += 1
 
@@ -82,13 +82,16 @@ class Go2Robot(LeggedRobot):
 
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
-
     def check_termination(self):
         """ Check if environments need to be reset
         """
         self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
         self.time_out_buf = self.episode_length_buf > self.max_episode_length # no terminal reward for time-outs
         self.reset_buf |= self.time_out_buf
+
+        base_z = self.root_states[:, 2]
+        z_threshold_buff = base_z < -3
+        self.reset_buf |= z_threshold_buff
 
     def reset_idx(self, env_ids):
         """ Reset some environments.
@@ -157,13 +160,14 @@ class Go2Robot(LeggedRobot):
     def compute_observations(self):
         """ Computes observations
         """
-        self.obs_buf = torch.cat((  self.base_lin_vel * self.obs_scales.lin_vel,   # linear velocity
-                                    self.base_ang_vel  * self.obs_scales.ang_vel,   # angular velocity
-                                    self.projected_gravity,                        # pose 姿态
-                                    self.commands[:, :3] * self.commands_scale,    # x,y 方向的线速度，以及yaw偏航角速度
-                                    (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,  # 每个关节的残差
-                                    self.dof_vel * self.obs_scales.dof_vel,    # 每个关节的速度
-                                    self.actions  # policy输出的action
+        self.obs_buf = torch.cat((  self.base_lin_vel * self.obs_scales.lin_vel,
+                                    self.base_ang_vel  * self.obs_scales.ang_vel,
+                                    self.projected_gravity,
+                                    self.commands[:, :3] * self.commands_scale,
+                                    (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
+                                    self.dof_vel * self.obs_scales.dof_vel,
+                                    self.actions,
+
                                     ),dim=-1)
         # add perceptive inputs if not blind
         if self.cfg.terrain.measure_heights:
@@ -171,8 +175,9 @@ class Go2Robot(LeggedRobot):
 
             print('heights', torch.mean(heights))
 
-            if not self.cfg.env.symmetric:
-                 self.privileged_obs_buf = torch.cat((self.obs_buf, heights), dim=-1)
+            #if not self.cfg.env.symmetric:
+            self.obs_buf= torch.cat((self.obs_buf, heights), dim=-1)
+            self.privileged_obs_buf = self.obs_buf
         # add noise if needed
         if self.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
@@ -184,40 +189,45 @@ class Go2Robot(LeggedRobot):
         vertical_scale = self.cfg.terrain.vertical_scale
         num_rows = int(terrain_width/horizontal_scale)
         num_cols = int(terrain_length/horizontal_scale)
-        heightfield = np.zeros((num_terains*num_rows, num_cols), dtype=np.int16)
 
 
         def new_sub_terrain(): return SubTerrain(width=num_rows, length=num_cols, vertical_scale=vertical_scale, horizontal_scale=horizontal_scale)
 
-        heightfield[0:num_rows, :] = sloped_terrain(new_sub_terrain(), slope=0.0).height_field_raw
-        heightfield[num_rows:2*num_rows, :] = pyramid_sloped_terrain(new_sub_terrain(), slope=-0.3).height_field_raw
-        #heightfield[num_rows:2*num_rows, :] = sloped_terrain(new_sub_terrain(), slope=0.1).height_field_raw
-        heightfield[2*num_rows:3*num_rows, :] = random_uniform_terrain(new_sub_terrain(), min_height=-0.15, max_height=0.15, step=0.2, downsampled_scale=0.5).height_field_raw
-        heightfield[3*num_rows:4*num_rows, :] = discrete_obstacles_terrain(new_sub_terrain(), max_height=0.15, min_size=1., max_size=5., num_rects=20).height_field_raw
-        heightfield[4*num_rows:5*num_rows, :] = wave_terrain(new_sub_terrain(), num_waves=2., amplitude=1.).height_field_raw
-        heightfield[5*num_rows:6*num_rows, :] = stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=0.25).height_field_raw
-        heightfield[6*num_rows:7*num_rows, :] = stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=-0.25,init_height=850).height_field_raw
-        #heightfield[6*num_rows:7*num_rows, :] = pyramid_stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=-0.5).height_field_raw
-        heightfield[7*num_rows:8*num_rows, :] = stepping_stones_terrain(new_sub_terrain(), stone_size=1.,
+        self.terrain.heightsamples[0:num_rows, :] =  sloped_terrain(new_sub_terrain(), slope=0.0).height_field_raw
+        self.terrain.heightsamples[num_rows:2*num_rows, :] = pyramid_sloped_terrain(new_sub_terrain(), slope=-0.3).height_field_raw
+        #self.terrain.heightsamples[num_rows:2*num_rows, :] = sloped_terrain(new_sub_terrain(), slope=0.1).height_field_raw
+        self.terrain.heightsamples[2*num_rows:3*num_rows, :] = random_uniform_terrain(new_sub_terrain(), min_height=-0.15, max_height=0.15, step=0.2, downsampled_scale=0.5).height_field_raw
+        self.terrain.heightsamples[3*num_rows:4*num_rows,:] = discrete_obstacles_terrain(new_sub_terrain(), max_height=0.15, min_size=1., max_size=5., num_rects=20).height_field_raw
+        self.terrain.heightsamples[4*num_rows:5*num_rows,:] = wave_terrain(new_sub_terrain(), num_waves=2., amplitude=1.).height_field_raw
+        self.terrain.heightsamples[5*num_rows:6*num_rows, :] = stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=0.25).height_field_raw
+        self.terrain.heightsamples[6*num_rows:7*num_rows, :] = stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=-0.25,init_height=850).height_field_raw
+        #self.terrain.heightsamples[6*num_rows:7*num_rows,:48] = pyramid_stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=-0.5).height_field_raw
+        self.terrain.heightsamples[7*num_rows:8*num_rows,:] = stepping_stones_terrain(new_sub_terrain(), stone_size=1.,
                                                                         stone_distance=0.25, max_height=0.2, platform_size=0.).height_field_raw
 
-        # add the terrain as a triangle mesh
-        vertices, triangles = convert_heightfield_to_trimesh(heightfield, horizontal_scale=horizontal_scale, vertical_scale=vertical_scale, slope_threshold=1.5)
+        
+        self.terrain.vertices, self.terrain.triangles = convert_heightfield_to_trimesh(self.terrain.heightsamples, horizontal_scale=horizontal_scale, vertical_scale=vertical_scale, slope_threshold=1.5)
         tm_params = gymapi.TriangleMeshParams()
-        tm_params.nb_vertices = vertices.shape[0]
-        tm_params.nb_triangles = triangles.shape[0]
-        tm_params.transform.p.x = -1.
-        tm_params.transform.p.y = -1.
-        self.gym.add_triangle_mesh(self.sim, vertices.flatten(), triangles.flatten(), tm_params)
+        tm_params.nb_vertices = self.terrain.vertices.shape[0]
+        tm_params.nb_triangles = self.terrain.triangles.shape[0]
+        tm_params.transform.p.x = -0.
+        tm_params.transform.p.y = -0.
+        self.gym.add_triangle_mesh(self.sim, self.terrain.vertices.flatten(), self.terrain.triangles.flatten(), tm_params)
 
         self.width_per_env_pixels = int(terrain_width / horizontal_scale)
         self.length_per_env_pixels = int(terrain_length / horizontal_scale)
 
         self.border = int(self.cfg.terrain.border_size/self.cfg.terrain.horizontal_scale)
-        self.tot_cols = int(self.cfg.terrain.num_cols * self.width_per_env_pixels) + 2 * self.border
-        self.tot_rows = int(self.cfg.terrain.num_rows * self.length_per_env_pixels) + 2 * self.border
+        self.tot_cols = int(self.cfg.terrain.num_cols * self.width_per_env_pixels) #+ 2 * self.border
+        self.tot_rows = int(self.cfg.terrain.num_rows * self.length_per_env_pixels) #+ 2 * self.border
+
         self.height_field_raw = np.zeros((self.tot_rows , self.tot_cols), dtype=np.int16)
+        self.height_field_raw[:,:] = self.terrain.heightsamples[:,:]
+
+
+
         self.height_samples = torch.tensor(self.height_field_raw).view(self.tot_rows, self.terrain.tot_cols).to(self.device)
+
     def create_sim(self):
         """ Creates simulation, terrain and evironments
         """
@@ -406,6 +416,8 @@ class Go2Robot(LeggedRobot):
         else:
             self.root_states[env_ids] = self.base_init_state
             self.root_states[env_ids, :3] += self.env_origins[env_ids]
+            #print("root_states",self.root_states[env_ids, 2:3])
+            #print("env_origins",self.env_origins[env_ids,2:3])
         # base velocities
         self.root_states[env_ids, 7:13] = torch_rand_float(-0.5, 0.5, (len(env_ids), 6), device=self.device) # [7:10]: lin vel, [10:13]: ang vel
         env_ids_int32 = env_ids.to(dtype=torch.int32)
@@ -487,11 +499,21 @@ class Go2Robot(LeggedRobot):
         actor_root_state = self.gym.acquire_actor_root_state_tensor(self.sim)
         dof_state_tensor = self.gym.acquire_dof_state_tensor(self.sim)
         net_contact_forces = self.gym.acquire_net_contact_force_tensor(self.sim)
+        rigid_body_tensor = self.gym.acquire_rigid_body_state_tensor(self.sim)
         self.gym.refresh_dof_state_tensor(self.sim)
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
-
+        self.gym.refresh_rigid_body_state_tensor(self.sim)
         # create some wrapper tensors for different slices
+
+        self.rigid_body_states = gymtorch.wrap_tensor(rigid_body_tensor).view(self.num_envs, -1, 13)
+
+
+
+        self.foot_pos = self.rigid_body_states[:, self.feet_indices, :3]
+
+        # xyz,quat,lin_vel,ang_vel
+
         self.root_states = gymtorch.wrap_tensor(actor_root_state)
         self.dof_state = gymtorch.wrap_tensor(dof_state_tensor)
         self.dof_pos = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 0]
@@ -645,6 +667,7 @@ class Go2Robot(LeggedRobot):
         asset_options.disable_gravity = self.cfg.asset.disable_gravity
 
         robot_asset = self.gym.load_asset(self.sim, asset_root, asset_file, asset_options)
+        self.robot_asset = robot_asset
         self.num_dof = self.gym.get_asset_dof_count(robot_asset)
         self.num_bodies = self.gym.get_asset_rigid_body_count(robot_asset)
         dof_props_asset = self.gym.get_asset_dof_properties(robot_asset)
@@ -720,9 +743,17 @@ class Go2Robot(LeggedRobot):
             self.env_origins[:] = self.terrain_origins[self.terrain_levels, self.terrain_types]
         elif self.cfg.terrain.mesh_type in ["competition"]:
             self.custom_origins = False
-            self.env_origins = torch_rand_float(0+1, self.cfg.terrain.terrain_width-1, (self.num_envs,3), device=self.device)
-            self.env_origins[:, 2] = 0.
-            # create a grid of robots      
+            self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
+
+           # self.env_origins[:,0:1] = torch_rand_float(0, 108, (self.num_envs,1), device=self.device)
+           # self.env_origins[:,1:2] = torch_rand_float(4, 8, (self.num_envs,1), device=self.device)
+
+            indices = torch.where((self.env_origins[:, 0:1] >= 60) & (self.env_origins[:, 0:1] <= 72))[0]
+            self.env_origins[indices, 2:3] = 0.33 * (self.env_origins[indices, 0:1] - 60)+0.3
+
+            indices = torch.where((self.env_origins[:, 0:1] >= 72) & (self.env_origins[:, 0:1] <= 84))[0]
+            self.env_origins[indices, 2:3] = 3.7 - 0.33 * (self.env_origins[indices, 0:1] - 72)
+
         else:
             self.custom_origins = False
             self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
@@ -807,17 +838,22 @@ class Go2Robot(LeggedRobot):
         else:
             points = quat_apply_yaw(self.base_quat.repeat(1, self.num_height_points), self.height_points) + (self.root_states[:, :3]).unsqueeze(1)
 
-        points += self.terrain.cfg.border_size
-        points = (points/self.terrain.cfg.horizontal_scale).long()
+        if self.cfg.terrain.mesh_type == 'competition':
+            points = (points/self.terrain.cfg.horizontal_scale).long()
+        else:
+            points += self.terrain.cfg.border_size
+            points = (points/self.terrain.cfg.horizontal_scale).long()
+
         px = points[:, :, 0].view(-1)
         py = points[:, :, 1].view(-1)
         px = torch.clip(px, 0, self.height_samples.shape[0]-2)
         py = torch.clip(py, 0, self.height_samples.shape[1]-2)
 
+        #pos = x,y
+        # ,self.height_samples[x/0.25,y/0.25]
         heights1 = self.height_samples[px, py]
         heights2 = self.height_samples[px+1, py]
         heights3 = self.height_samples[px, py+1]
-
         heights = torch.min(heights1, heights2)
         heights = torch.min(heights, heights3)
 
@@ -839,7 +875,6 @@ class Go2Robot(LeggedRobot):
     def _reward_base_height(self):
         # Penalize base height away from target
         base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
-        # print(base_height)
         return torch.square(base_height - self.cfg.rewards.base_height_target)
     
     def _reward_torques(self):
@@ -916,3 +951,14 @@ class Go2Robot(LeggedRobot):
     def _reward_feet_contact_forces(self):
         # penalize high contact forces
         return torch.sum((torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1) -  self.cfg.rewards.max_contact_force).clip(min=0.), dim=1)
+
+    def _reward_feet_height(self):
+        # penalize feet too low
+
+       #self.foot_handles = self.gym.find_asset_rigid_body_index(self.robot_asset, "hip_names")
+        #self.foot_pos
+        # heights
+        #return torch.sum((self.root_states[:, 2].unsqueeze(1) - self.measured_heights).clip(min=0.), dim=1)
+
+
+        return torch.sum((self.foot_pos[:, :, 2] - self.measured_heights).clip(min=0.), dim=1)

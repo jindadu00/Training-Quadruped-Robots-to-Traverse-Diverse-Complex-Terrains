@@ -53,20 +53,25 @@ class Terrain:
         self.width_per_env_pixels = int(self.env_width / cfg.horizontal_scale)
         self.length_per_env_pixels = int(self.env_length / cfg.horizontal_scale)
 
-        self.border = int(cfg.border_size/self.cfg.horizontal_scale)
-        self.tot_cols = int(cfg.num_cols * self.width_per_env_pixels) + 2 * self.border
-        self.tot_rows = int(cfg.num_rows * self.length_per_env_pixels) + 2 * self.border
+        if self.type in ['competition']:
+            self.border = int(cfg.border_size/self.cfg.horizontal_scale)
+            self.tot_cols = int(cfg.num_cols * self.width_per_env_pixels) 
+            self.tot_rows = int(cfg.num_rows * self.length_per_env_pixels) 
+        else:
+            self.tot_cols = int(cfg.num_cols * self.width_per_env_pixels) + 2 * self.border
+            self.tot_rows = int(cfg.num_rows * self.length_per_env_pixels) + 2 * self.border
+            if cfg.curriculum:
+                self.curiculum()
+            elif cfg.selected:
+                self.selected_terrain()
+            else:    
+                self.randomized_terrain()   
 
         self.height_field_raw = np.zeros((self.tot_rows , self.tot_cols), dtype=np.int16)
-        if cfg.curriculum:
-            self.curiculum()
-        elif cfg.selected:
-            self.selected_terrain()
-        else:    
-            self.randomized_terrain()   
+
         
         self.heightsamples = self.height_field_raw
-        if self.type=="trimesh":
+        if self.type in ['trimesh','competition']:
             self.vertices, self.triangles = terrain_utils.convert_heightfield_to_trimesh(   self.height_field_raw,
                                                                                             self.cfg.horizontal_scale,
                                                                                             self.cfg.vertical_scale,

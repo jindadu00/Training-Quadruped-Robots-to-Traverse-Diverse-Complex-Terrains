@@ -74,7 +74,9 @@ def play(args):
     camera_vel = np.array([1., 1., 0.])
     camera_direction = np.array(env_cfg.viewer.lookat) - np.array(env_cfg.viewer.pos)
     img_idx = 0
-
+    #  get input 
+    #vel =x
+    #obs[:,12:15] = vel.
     for i in range(10*int(env.max_episode_length)):
         actions = policy(obs.detach())
         obs, _, rews, dones, infos = env.step(actions.detach())
@@ -87,10 +89,7 @@ def play(args):
             camera_position += camera_vel * env.dt
             env.set_camera(camera_position, camera_position + camera_direction)
 
-        # ter_height = torch.mean(env.measured_heights[robot_index])
-        # print(f"Measured terrain height: {ter_height}")
         if i < stop_state_log:
-            
             logger.log_states(
                 {
                     'dof_pos_target': actions[robot_index, joint_index].item() * env.cfg.control.action_scale,

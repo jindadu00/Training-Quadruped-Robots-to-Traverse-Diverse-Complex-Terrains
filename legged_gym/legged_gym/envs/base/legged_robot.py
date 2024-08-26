@@ -828,7 +828,6 @@ class LeggedRobot(BaseTask):
     def _reward_base_height(self):
         # Penalize base height away from target
         base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
-        print('--------------111----------------')
         return torch.square(base_height - self.cfg.rewards.base_height_target)
     
     def _reward_torques(self):

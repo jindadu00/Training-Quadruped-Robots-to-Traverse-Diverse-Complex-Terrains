@@ -30,8 +30,8 @@ class Go2RoughCfg( LeggedRobotCfg ):
         max_init_terrain_level = 5 # starting curriculum state
         terrain_length = 12.
         terrain_width = 12.
-        num_rows= 10 # number of terrain rows (levels)
-        num_cols = 20 # number of terrain cols (types)
+        num_rows= 9 # number of terrain rows (levels)
+        num_cols = 1 # number of terrain cols (types)
         # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete]
         terrain_proportions = [0,1, 0, 0, 0]
         # trimesh only:
@@ -65,14 +65,13 @@ class Go2RoughCfg( LeggedRobotCfg ):
             lin_vel_x = [0.5, 0.5] # min max [m/s]
             lin_vel_y = [0., 0.]   # min max [m/s]
             ang_vel_yaw = [0., 0.]    # min max [rad/s]
-            heading = [0., 0.]
-            # heading = [-3.14, 3.14]
+            heading = [0, 0]
 
     class control( LeggedRobotCfg.control ):
         # PD Drive parameters:
         control_type = 'P'
-        stiffness = {'joint': 20.}  # [N*m/rad]
-        damping = {'joint': 0.5}     # [N*m*s/rad]
+        stiffness = {'joint': 50.}  # [N*m/rad]
+        damping = {'joint': 2}     # [N*m*s/rad]
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 0.25
         # decimation: Number of control action updates @ sim DT per policy DT
@@ -83,42 +82,58 @@ class Go2RoughCfg( LeggedRobotCfg ):
         name = "go2"
         foot_name = "foot"
         penalize_contacts_on = ["thigh", "calf"]
-        terminate_after_contacts_on = ["base","hip"]
+        terminate_after_contacts_on = ["base"]
         self_collisions = 0 # 1 to disable, 0 to enable...bitwise filter
         flip_visual_attachments = True
     class domain_rand:
-        randomize_friction = True
+        randomize_friction = False
         friction_range = [0.2, 1.5]
         randomize_base_mass = False
         added_mass_range = [-4., 4.]
-        push_robots = True
+        push_robots = False
         push_interval_s = 15
         max_push_vel_xy = 1.
 
-        randomize_base_com = True
+        randomize_base_com = False
         added_com_range = [-0.15, 0.15]
 
-        randomize_motor = True
+        randomize_motor = False
         motor_strength_range = [0.8, 1.2]
 
     class rewards( LeggedRobotCfg.rewards ):
         class scales( LeggedRobotCfg.rewards.scales ):
-            termination = -0.0
-            tracking_lin_vel = 1.0
+            termination = -0.
+            tracking_lin_vel = 2.0
             tracking_ang_vel = 0.5
             lin_vel_z = -0.001
-            ang_vel_xy = -0.05
-            orientation = -0.
+            ang_vel_xy = -0.01
+            orientation = -0.1
             torques = -0.0002
-            dof_vel = -0.
+            dof_vel = -2.5e-7
             dof_acc = -2.5e-7
             base_height = -10. 
             feet_air_time =  1.0
             collision = -1.
             feet_stumble = -0.0 
-            action_rate = -0.01
-            stand_still = -0.
-            dof_pos_limits =-10.
+            action_rate = -0.001
+            stand_still = -0.1
+            dof_pos_limits =-0.01
+            #goal_pos = 0.45
+
+# step 1 
+# negtive reward -> -0.001
+
+
+
+# tracking_lin_vel 0.02
+# dof_pos_limits -0.1   -10  -> -1 : -0.01 
+
+
+# reward 100
+# tracking_lin_vel 0.9
+
+# base_height = -0.01 -> base_height = -0.05
+# orientation =-0.0001  orientation= -0.1
 
         only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
         tracking_sigma = 0.25 # tracking reward = exp(-error^2/sigma)
@@ -126,7 +141,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         soft_dof_vel_limit = 1.
         soft_torque_limit = 1.
         base_height_target = 0.3
-        max_contact_force = 60. # forces above this value are penalized
+        max_contact_force = 100. # forces above this value are penalized
 
 class Go2RoughCfgPPO( LeggedRobotCfgPPO ):
     class algorithm( LeggedRobotCfgPPO.algorithm ):

@@ -186,11 +186,12 @@ def stairs_terrain(terrain, step_width, step_height,init_height=0):
     step_height = int(step_height / terrain.vertical_scale)
     
     num_steps = terrain.width // step_width
-    height = step_height+init_height
+    height = init_height+step_height
     
     for i in range(num_steps):
         terrain.height_field_raw[i * step_width: (i + 1) * step_width, :] += height
         height += step_height
+        #print("height",height)
     return terrain
 
 

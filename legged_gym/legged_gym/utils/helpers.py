@@ -37,7 +37,6 @@ from isaacgym import gymapi
 from isaacgym import gymutil
 
 from legged_gym import LEGGED_GYM_ROOT_DIR, LEGGED_GYM_ENVS_DIR
-from legged_gym.envs.go2.go2_config import Go2RoughCfg
 
 def class_to_dict(obj) -> dict:
     if not  hasattr(obj,"__dict__"):
@@ -127,72 +126,10 @@ def get_load_path(root, load_run=-1, checkpoint=-1):
 
 def update_cfg_from_args(env_cfg, cfg_train, args):
     # seed
-    # print("-----------------------------------")
-    # print("env_cfg: ", env_cfg)
-    # print("-----------------------------------")
-    # print("cfg_train: ", cfg_train)
-    # print("-----------------------------------")
     if env_cfg is not None:
         # num envs
         if args.num_envs is not None:
             env_cfg.env.num_envs = args.num_envs
-
-        # 更新奖励函数的具体参数
-        if args.termination is not None:
-            env_cfg.rewards.scales.termination = args.termination
-        if args.tracking_lin_vel is not None:
-            env_cfg.rewards.scales.tracking_lin_vel = args.tracking_lin_vel
-        if args.tracking_ang_vel is not None:
-            env_cfg.rewards.scales.tracking_ang_vel = args.tracking_ang_vel
-        if args.lin_vel_z is not None:
-            env_cfg.rewards.scales.lin_vel_z = args.lin_vel_z
-        if args.ang_vel_xy is not None:
-            env_cfg.rewards.scales.ang_vel_xy = args.ang_vel_xy
-        if args.orientation is not None:
-            env_cfg.rewards.scales.orientation = args.orientation
-        if args.torques is not None:
-            env_cfg.rewards.scales.torques = args.torques
-        if args.dof_vel is not None:
-            env_cfg.rewards.scales.dof_vel = args.dof_vel
-        if args.dof_acc is not None:
-            env_cfg.rewards.scales.dof_acc = args.dof_acc
-        if args.base_height is not None:
-            env_cfg.rewards.scales.base_height = args.base_height
-        if args.feet_air_time is not None:
-            env_cfg.rewards.scales.feet_air_time = args.feet_air_time
-        if args.collision is not None:
-            env_cfg.rewards.scales.collision = args.collision
-        if args.feet_stumble is not None:
-            env_cfg.rewards.scales.feet_stumble = args.feet_stumble
-        if args.action_rate is not None:
-            env_cfg.rewards.scales.action_rate = args.action_rate
-        if args.stand_still is not None:
-            env_cfg.rewards.scales.stand_still = args.stand_still
-        if args.dof_pos_limits is not None:
-            env_cfg.rewards.scales.dof_pos_limits = args.dof_pos_limits
-        if args.base_height_target is not None:
-            env_cfg.rewards.base_height_target = args.base_height_target
-
-
-        # print("-----------------------------------")
-        # print("termination: ", env_cfg.rewards.scales.termination)
-        # print("tracking_lin_vel: ", env_cfg.rewards.scales.tracking_lin_vel)
-        # print("tracking_ang_vel: ", env_cfg.rewards.scales.tracking_ang_vel)
-        # print("lin_vel_z: ", env_cfg.rewards.scales.lin_vel_z)
-        # print("ang_vel_xy: ", env_cfg.rewards.scales.ang_vel_xy)
-        # print("orientation: ", env_cfg.rewards.scales.orientation)
-        # print("torques: ", env_cfg.rewards.scales.torques)
-        # print("dof_vel: ", env_cfg.rewards.scales.dof_vel)
-        # print("dof_acc: ", env_cfg.rewards.scales.dof_acc)
-        # print("base_height: ", env_cfg.rewards.scales.base_height)
-        # print("feet_air_time: ", env_cfg.rewards.scales.feet_air_time)
-        # print("collision: ", env_cfg.rewards.scales.collision)
-        # print("feet_stumble: ", env_cfg.rewards.scales.feet_stumble)
-        # print("action_rate: ", env_cfg.rewards.scales.action_rate)
-        # print("stand_still: ", env_cfg.rewards.scales.stand_still)
-        # print("dof_pos_limits: ", env_cfg.rewards.scales.dof_pos_limits)
-        # print("-----------------------------------")
-
     if cfg_train is not None:
         if args.seed is not None:
             cfg_train.seed = args.seed
@@ -209,7 +146,6 @@ def update_cfg_from_args(env_cfg, cfg_train, args):
             cfg_train.runner.load_run = args.load_run
         if args.checkpoint is not None:
             cfg_train.runner.checkpoint = args.checkpoint
-
 
     return env_cfg, cfg_train
 
@@ -228,27 +164,6 @@ def get_args():
         {"name": "--num_envs", "type": int, "help": "Number of environments to create. Overrides config file if provided."},
         {"name": "--seed", "type": int, "help": "Random seed. Overrides config file if provided."},
         {"name": "--max_iterations", "type": int, "help": "Maximum number of training iterations. Overrides config file if provided."},
-
-
-        {"name": "--termination", "type": float, "default": Go2RoughCfg.rewards.scales.termination, "help": "Reward for termination."},
-        {"name": "--tracking_lin_vel", "type": float, "default": Go2RoughCfg.rewards.scales.tracking_lin_vel, "help": "Reward for tracking linear velocity."},
-        {"name": "--tracking_ang_vel", "type": float, "default": Go2RoughCfg.rewards.scales.tracking_ang_vel, "help": "Reward for tracking angular velocity."},
-        {"name": "--lin_vel_z", "type": float, "default": Go2RoughCfg.rewards.scales.lin_vel_z, "help": "Reward for linear velocity in Z direction."},
-        {"name": "--ang_vel_xy", "type": float, "default": Go2RoughCfg.rewards.scales.ang_vel_xy, "help": "Reward for angular velocity in XY plane."},
-        {"name": "--orientation", "type": float, "default": Go2RoughCfg.rewards.scales.orientation, "help": "Reward for maintaining correct orientation."},
-        {"name": "--torques", "type": float, "default": Go2RoughCfg.rewards.scales.torques, "help": "Reward for minimizing torques."},
-        {"name": "--dof_vel", "type": float, "default": Go2RoughCfg.rewards.scales.dof_vel, "help": "Reward for minimizing DOF velocities."},
-        {"name": "--dof_acc", "type": float, "default": Go2RoughCfg.rewards.scales.dof_acc, "help": "Reward for minimizing DOF accelerations."},
-        {"name": "--base_height", "type": float, "default": Go2RoughCfg.rewards.scales.base_height, "help": "Reward for maintaining base height."},
-        {"name": "--feet_air_time", "type": float, "default": Go2RoughCfg.rewards.scales.feet_air_time, "help": "Reward for maximizing feet air time."},
-        {"name": "--collision", "type": float, "default": Go2RoughCfg.rewards.scales.collision, "help": "Penalty for collisions."},
-        {"name": "--feet_stumble", "type": float, "default": Go2RoughCfg.rewards.scales.feet_stumble, "help": "Penalty for feet stumbling."},
-        {"name": "--action_rate", "type": float, "default": Go2RoughCfg.rewards.scales.action_rate, "help": "Penalty for rapid changes in actions."},
-        {"name": "--stand_still", "type": float, "default": Go2RoughCfg.rewards.scales.stand_still, "help": "Penalty for motion when standing still."},
-        {"name": "--dof_pos_limits", "type": float, "default": Go2RoughCfg.rewards.scales.dof_pos_limits, "help": "Penalty for exceeding DOF position limits."},
-        {"name": "--base_height_target", "type": float, "default": Go2RoughCfg.rewards.base_height_target, "help": "Penalty for base height target."}
-
-
     ]
     # parse arguments
     args = gymutil.parse_arguments(
