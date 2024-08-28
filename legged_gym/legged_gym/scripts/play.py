@@ -43,8 +43,6 @@ def play(args):
     env_cfg, train_cfg = task_registry.get_cfgs(name=args.task)
     # override some parameters for testing
     env_cfg.env.num_envs = min(env_cfg.env.num_envs, 50)
-    env_cfg.terrain.num_rows = 5
-    env_cfg.terrain.num_cols = 5
     env_cfg.terrain.curriculum = False
     #env_cfg.terrain.mesh_type = 'plane'
     env_cfg.noise.add_noise = False
@@ -68,7 +66,7 @@ def play(args):
     logger = Logger(env.dt)
     robot_index = 0 # which robot is used for logging
     joint_index = 1 # which joint is used for logging
-    stop_state_log = 1000 # number of steps before plotting states
+    stop_state_log = 1000 # TODO number of steps before plotting states
     stop_rew_log = env.max_episode_length + 1 # number of steps before print average episode rewards
     camera_position = np.array(env_cfg.viewer.pos, dtype=np.float64)
     camera_vel = np.array([1., 1., 0.])
@@ -89,6 +87,10 @@ def play(args):
             camera_position += camera_vel * env.dt
             env.set_camera(camera_position, camera_position + camera_direction)
 
+        base_height=env.root_states[robot_index, 2] - torch.mean(env.measured_heights[robot_index])
+        ter_height=torch.mean(env.measured_heights[robot_index])
+        orientation=env.projected_gravity[robot_index]
+        # print(orientation)
         if i < stop_state_log:
             logger.log_states(
                 {
@@ -104,8 +106,8 @@ def play(args):
                     'base_vel_z': env.base_lin_vel[robot_index, 2].item(),
                     'base_vel_yaw': env.base_ang_vel[robot_index, 2].item(),
                     'contact_forces_z': env.contact_forces[robot_index, env.feet_indices, 2].cpu().numpy(),
-                    'base_height': env.root_states[robot_index, 2].item(),  # Base height (z position)
-                    # 'ter_height':ter_height.item(),
+                    'base_height': base_height.item(),  # Base height (z position)
+                    'ter_height': ter_height.item(),
                     'base_pos_x': env.root_states[robot_index, 0].item(),   # X direction position
                     'base_pos_y': env.root_states[robot_index, 1].item()    # Y direction position
                 }

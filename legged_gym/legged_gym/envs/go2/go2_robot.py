@@ -80,6 +80,7 @@ class Go2Robot(LeggedRobot):
         self.last_dof_vel[:] = self.dof_vel[:]
         self.last_root_vel[:] = self.root_states[:, 7:13]
 
+        # self._draw_debug_vis()
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
     def check_termination(self):
@@ -160,22 +161,20 @@ class Go2Robot(LeggedRobot):
     def compute_observations(self):
         """ Computes observations
         """
-        self.obs_buf = torch.cat((  self.base_lin_vel * self.obs_scales.lin_vel,
-                                    self.base_ang_vel  * self.obs_scales.ang_vel,
-                                    self.projected_gravity,
-                                    self.commands[:, :3] * self.commands_scale,
-                                    (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
-                                    self.dof_vel * self.obs_scales.dof_vel,
-                                    self.actions,
+        self.obs_buf = torch.cat((  self.base_lin_vel * self.obs_scales.lin_vel,  # linear velocity
+                                    self.base_ang_vel  * self.obs_scales.ang_vel,  # angular velocity
+                                    self.projected_gravity,                       # pose 姿态
+                                    self.commands[:, :3] * self.commands_scale,   # x,y 方向的线速度，以及yaw偏航角速度
+                                    (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,  # 每个关节的残差
+                                    self.dof_vel * self.obs_scales.dof_vel,    # 每个关节的速度
+                                    self.actions,  # policy输出的action
 
                                     ),dim=-1)
         # add perceptive inputs if not blind
         if self.cfg.terrain.measure_heights:
             heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements
-
-            print('heights', torch.mean(heights))
-
             #if not self.cfg.env.symmetric:
+            
             self.obs_buf= torch.cat((self.obs_buf, heights), dim=-1)
             self.privileged_obs_buf = self.obs_buf
         # add noise if needed
@@ -744,9 +743,9 @@ class Go2Robot(LeggedRobot):
         elif self.cfg.terrain.mesh_type in ["competition"]:
             self.custom_origins = False
             self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
-
-           # self.env_origins[:,0:1] = torch_rand_float(0, 108, (self.num_envs,1), device=self.device)
-           # self.env_origins[:,1:2] = torch_rand_float(4, 8, (self.num_envs,1), device=self.device)
+            #TODO modify the inital position of the robots
+            self.env_origins[:,0:1] = torch_rand_float(3, 9, (self.num_envs,1), device=self.device)
+            self.env_origins[:,1:2] = torch_rand_float(4, 8, (self.num_envs,1), device=self.device)
 
             indices = torch.where((self.env_origins[:, 0:1] >= 60) & (self.env_origins[:, 0:1] <= 72))[0]
             self.env_origins[indices, 2:3] = 0.33 * (self.env_origins[indices, 0:1] - 60)+0.3
@@ -870,7 +869,9 @@ class Go2Robot(LeggedRobot):
     
     def _reward_orientation(self):
         # Penalize non flat base orientation
+        
         return torch.sum(torch.square(self.projected_gravity[:, :2]), dim=1)
+        
 
     def _reward_base_height(self):
         # Penalize base height away from target
@@ -952,13 +953,13 @@ class Go2Robot(LeggedRobot):
         # penalize high contact forces
         return torch.sum((torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1) -  self.cfg.rewards.max_contact_force).clip(min=0.), dim=1)
 
-    def _reward_feet_height(self):
-        # penalize feet too low
+    # def _reward_feet_height(self):
+    #     # penalize feet too low
 
-       #self.foot_handles = self.gym.find_asset_rigid_body_index(self.robot_asset, "hip_names")
-        #self.foot_pos
-        # heights
-        #return torch.sum((self.root_states[:, 2].unsqueeze(1) - self.measured_heights).clip(min=0.), dim=1)
+    #    #self.foot_handles = self.gym.find_asset_rigid_body_index(self.robot_asset, "hip_names")
+    #     #self.foot_pos
+    #     # heights
+    #     #return torch.sum((self.root_states[:, 2].unsqueeze(1) - self.measured_heights).clip(min=0.), dim=1)
 
 
-        return torch.sum((self.foot_pos[:, :, 2] - self.measured_heights).clip(min=0.), dim=1)
+    #     return torch.sum((self.foot_pos[:, :, 2] - self.measured_heights).clip(min=0.), dim=1)

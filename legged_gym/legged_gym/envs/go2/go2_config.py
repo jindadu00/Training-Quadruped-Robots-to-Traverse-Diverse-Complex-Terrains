@@ -4,14 +4,13 @@ class Go2RoughCfg( LeggedRobotCfg ):
 
     class env( LeggedRobotCfg.env ):
         num_envs = 4096
-        num_observations = 48
+        num_observations = 235
         symmetric = False  #True :  set num_privileged_obs = None;    false: num_privileged_obs = observations + 187 ,set "terrain.measure_heights" to true
-        # num_privileged_obs = None#num_observations + 187 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
-        num_privileged_obs = num_observations + 187
+        num_privileged_obs = 235
         num_actions = 12
         env_spacing = 3.  # not used with heightfields/trimeshes 
         send_timeouts = True # send time out information to the algorithm
-        episode_length_s = 100 # episode length in seconds
+        episode_length_s = 300 # episode length in seconds
     class terrain( LeggedRobotCfg.env ):
         mesh_type = 'competition' # "heightfield" # none, plane, heightfield or trimesh
         horizontal_scale = 0.25 # [m]
@@ -102,22 +101,22 @@ class Go2RoughCfg( LeggedRobotCfg ):
 
     class rewards( LeggedRobotCfg.rewards ):
         class scales( LeggedRobotCfg.rewards.scales ):
-            termination = -0.
-            tracking_lin_vel = 2.0
+            termination = -0.0
+            tracking_lin_vel = 1.0
             tracking_ang_vel = 0.5
             lin_vel_z = -0.001
-            ang_vel_xy = -0.01
-            orientation = -0.1
+            ang_vel_xy = -0.05
+            orientation = -0.0
             torques = -0.0002
-            dof_vel = -2.5e-7
-            dof_acc = -2.5e-7
-            base_height = -10. 
-            feet_air_time =  1.0
-            collision = -1.
-            feet_stumble = -0.0 
-            action_rate = -0.001
-            stand_still = -0.1
-            dof_pos_limits =-0.01
+            dof_vel = -0.0
+            dof_acc = -2.5e-07
+            base_height = -0.0001
+            feet_air_time = 1.0
+            collision = -1.0
+            feet_stumble = -0.0
+            action_rate = -0.01
+            stand_still = -0.0
+            dof_pos_limits = -10.0
             #goal_pos = 0.45
 
 # step 1 
@@ -148,13 +147,13 @@ class Go2RoughCfgPPO( LeggedRobotCfgPPO ):
         entropy_coef = 0.01
     class runner( LeggedRobotCfgPPO.runner ):
         run_name = ''
-        experiment_name = 'rough_go2'
+        experiment_name = ''
 
   
         policy_class_name = 'ActorCritic'
         algorithm_class_name = 'PPO'
-        num_steps_per_env = 24 # per iteration
-        max_iterations = 3000 # number of policy updates
+        num_steps_per_env = 48 # per iteration
+        max_iterations = 6000 # number of policy updates
 
         # logging
         save_interval = 50 # check for potential saves every this many iterations
