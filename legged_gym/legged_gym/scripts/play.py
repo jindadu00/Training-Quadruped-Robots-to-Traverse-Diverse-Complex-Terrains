@@ -89,8 +89,16 @@ def play(args):
 
         base_height=env.root_states[robot_index, 2] - torch.mean(env.measured_heights[robot_index])
         ter_height=torch.mean(env.measured_heights[robot_index])
-        orientation=env.projected_gravity[robot_index]
-        # print(orientation)
+
+        # # (45-49,4.5-7.5)
+        # limbo_flag1 = (env.root_states[:, 0] > 42) & (env.root_states[:, 0] < 49) & (env.root_states[:, 1] > 4.5) & (env.root_states[:, 1] < 7.5)
+        # # (57-61,7.5-10.5)
+        # limbo_flag2 = (env.root_states[:, 0] > 54) & (env.root_states[:, 0] < 61) & (env.root_states[:, 1] > 7.5) & (env.root_states[:, 1] < 10.5)
+        # # (57-61,1.5-4.5)
+        # limbo_flag3 = (env.root_states[:, 0] > 54) & (env.root_states[:, 0] < 61) & (env.root_states[:, 1] > 1.5) & (env.root_states[:, 1] < 4.5)
+
+        # print(limbo_flag1,limbo_flag1,limbo_flag3)
+        # print('combination:', (limbo_flag1 | limbo_flag2 | limbo_flag3)*10)
         if i < stop_state_log:
             logger.log_states(
                 {

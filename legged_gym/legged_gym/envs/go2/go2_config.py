@@ -103,20 +103,21 @@ class Go2RoughCfg( LeggedRobotCfg ):
         class scales( LeggedRobotCfg.rewards.scales ):
             termination = -0.0
             tracking_lin_vel = 1.0
-            tracking_ang_vel = 0.5
-            lin_vel_z = -0.001
+            tracking_ang_vel = 0.1
+            lin_vel_z = -0.01
             ang_vel_xy = -0.05
-            orientation = -0.0
+            orientation = -1.0
             torques = -0.0002
             dof_vel = -0.0
             dof_acc = -2.5e-07
-            base_height = -0.0001
+            base_height = -0.001
             feet_air_time = 1.0
             collision = -1.0
             feet_stumble = -0.0
             action_rate = -0.01
             stand_still = -0.0
             dof_pos_limits = -10.0
+            limbo = -0.0
             #goal_pos = 0.45
 
 # step 1 

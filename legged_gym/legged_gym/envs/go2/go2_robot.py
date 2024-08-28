@@ -786,16 +786,19 @@ class Go2Robot(LeggedRobot):
             return
         self.gym.clear_lines(self.viewer)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
-        sphere_geom = gymutil.WireframeSphereGeometry(0.02, 4, 4, None, color=(1, 1, 0))
+        # sphere_geom = gymutil.WireframeSphereGeometry(0.02, 4, 4, None, color=(1, 1, 0))
         for i in range(self.num_envs):
             base_pos = (self.root_states[i, :3]).cpu().numpy()
             heights = self.measured_heights[i].cpu().numpy()
             height_points = quat_apply_yaw(self.base_quat[i].repeat(heights.shape[0]), self.height_points[i]).cpu().numpy()
+
+            # if base_pos[0]
             for j in range(heights.shape[0]):
                 x = height_points[j, 0] + base_pos[0]
                 y = height_points[j, 1] + base_pos[1]
                 z = heights[j]
                 sphere_pose = gymapi.Transform(gymapi.Vec3(x, y, z), r=None)
+                if 
                 gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], sphere_pose) 
 
     def _init_height_points(self):
@@ -869,9 +872,8 @@ class Go2Robot(LeggedRobot):
     
     def _reward_orientation(self):
         # Penalize non flat base orientation
-        
         return torch.sum(torch.square(self.projected_gravity[:, :2]), dim=1)
-        
+    
 
     def _reward_base_height(self):
         # Penalize base height away from target
@@ -952,6 +954,16 @@ class Go2Robot(LeggedRobot):
     def _reward_feet_contact_forces(self):
         # penalize high contact forces
         return torch.sum((torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1) -  self.cfg.rewards.max_contact_force).clip(min=0.), dim=1)
+
+
+    def _reward_limbo(self):
+        # (45-49,4.5-7.5)
+        limbo_flag1 = (self.root_states[:, 0] > 42) & (self.root_states[:, 0] < 49) & (self.root_states[:, 1] > 4.5) & (self.root_states[:, 1] < 7.5)
+        # (57-61,7.5-10.5)
+        limbo_flag2 = (self.root_states[:, 0] > 54) & (self.root_states[:, 0] < 61) & (self.root_states[:, 1] > 7.5) & (self.root_states[:, 1] < 10.5)
+        # (57-61,1.5-4.5)
+        limbo_flag3 = (self.root_states[:, 0] > 54) & (self.root_states[:, 0] < 61) & (self.root_states[:, 1] > 1.5) & (self.root_states[:, 1] < 4.5)
+        return limbo_flag1 | limbo_flag2 | limbo_flag3
 
     # def _reward_feet_height(self):
     #     # penalize feet too low
