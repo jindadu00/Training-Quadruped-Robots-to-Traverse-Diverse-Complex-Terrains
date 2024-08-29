@@ -786,7 +786,7 @@ class Go2Robot(LeggedRobot):
             return
         self.gym.clear_lines(self.viewer)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
-        # sphere_geom = gymutil.WireframeSphereGeometry(0.02, 4, 4, None, color=(1, 1, 0))
+        sphere_geom = gymutil.WireframeSphereGeometry(0.02, 4, 4, None, color=(1, 1, 0))
         for i in range(self.num_envs):
             base_pos = (self.root_states[i, :3]).cpu().numpy()
             heights = self.measured_heights[i].cpu().numpy()
@@ -798,7 +798,6 @@ class Go2Robot(LeggedRobot):
                 y = height_points[j, 1] + base_pos[1]
                 z = heights[j]
                 sphere_pose = gymapi.Transform(gymapi.Vec3(x, y, z), r=None)
-                if 
                 gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], sphere_pose) 
 
     def _init_height_points(self):
@@ -882,6 +881,7 @@ class Go2Robot(LeggedRobot):
     
     def _reward_torques(self):
         # Penalize torques
+        # print('torch.square(self.torques)',torch.square(self.torques))
         return torch.sum(torch.square(self.torques), dim=1)
 
     def _reward_dof_vel(self):
@@ -894,6 +894,7 @@ class Go2Robot(LeggedRobot):
     
     def _reward_action_rate(self):
         # Penalize changes in actions
+        # print(torch.sum(torch.square(self.last_actions - self.actions), dim=1))
         return torch.sum(torch.square(self.last_actions - self.actions), dim=1)
     
     def _reward_collision(self):
@@ -957,6 +958,7 @@ class Go2Robot(LeggedRobot):
 
 
     def _reward_limbo(self):
+        
         # (45-49,4.5-7.5)
         limbo_flag1 = (self.root_states[:, 0] > 42) & (self.root_states[:, 0] < 49) & (self.root_states[:, 1] > 4.5) & (self.root_states[:, 1] < 7.5)
         # (57-61,7.5-10.5)
