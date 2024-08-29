@@ -166,9 +166,10 @@ def update_cfg_from_args(env_cfg, cfg_train, args):
             env_cfg.rewards.scales.dof_pos_limits = args.dof_pos_limits
         if args.base_height_target is not None:
             env_cfg.rewards.base_height_target = args.base_height_target
+        if args.stagnation is not None:
+            env_cfg.rewards.scales.stagnation = args.stagnation
         if args.limbo is not None:
             env_cfg.rewards.scales.limbo = args.limbo
-
 
     if cfg_train is not None:
         if args.seed is not None:
@@ -223,8 +224,8 @@ def get_args():
         {"name": "--stand_still", "type": float, "default": Go2RoughCfg.rewards.scales.stand_still, "help": "Penalty for motion when standing still."},
         {"name": "--dof_pos_limits", "type": float, "default": Go2RoughCfg.rewards.scales.dof_pos_limits, "help": "Penalty for exceeding DOF position limits."},
         {"name": "--base_height_target", "type": float, "default": Go2RoughCfg.rewards.base_height_target, "help": "Penalty for base height target."},
-        {"name": "--limbo", "type": float, "default": Go2RoughCfg.rewards.scales.limbo, "help": "Penalty for limbo."}
-
+        {"name": "--stagnation", "type": float, "default": Go2RoughCfg.rewards.scales.stagnation, "help": "Penalty for stagnation."},
+        {"name": "--limbo", "type": float, "default": Go2RoughCfg.rewards.scales.limbo, "help": "Penalty for limbo."},
     ]
     # parse arguments
     args = gymutil.parse_arguments(

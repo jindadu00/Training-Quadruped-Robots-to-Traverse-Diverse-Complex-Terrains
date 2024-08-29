@@ -66,7 +66,7 @@ def play(args):
     logger = Logger(env.dt)
     robot_index = 0 # which robot is used for logging
     joint_index = 1 # which joint is used for logging
-    stop_state_log = 1000 # TODO number of steps before plotting states
+    stop_state_log = 100 # TODO number of steps before plotting states
     stop_rew_log = env.max_episode_length + 1 # number of steps before print average episode rewards
     camera_position = np.array(env_cfg.viewer.pos, dtype=np.float64)
     camera_vel = np.array([1., 1., 0.])
@@ -89,7 +89,10 @@ def play(args):
 
         base_height=env.root_states[robot_index, 2] - torch.mean(env.measured_heights[robot_index])
         ter_height=torch.mean(env.measured_heights[robot_index])
-
+        
+        # print('torch.mean(torch.square(env.base_lin_vel[:, :]),dim=1)=',torch.mean(torch.square(env.base_lin_vel[:, :]),dim=1))
+        # print(torch.mean(torch.square(env.base_lin_vel[:, :]),dim=1)<5e-4)
+        # print('torch.mean(torch.square(env.dof_vel[robot_index, :])).item()=',torch.mean(torch.square(env.dof_vel[robot_index, :])).item())
         if i < stop_state_log:
             logger.log_states(
                 {
@@ -108,7 +111,9 @@ def play(args):
                     'base_height': base_height.item(),  # Base height (z position)
                     'ter_height': ter_height.item(),
                     'base_pos_x': env.root_states[robot_index, 0].item(),   # X direction position
-                    'base_pos_y': env.root_states[robot_index, 1].item()    # Y direction position
+                    'base_pos_y': env.root_states[robot_index, 1].item(),   # Y direction position
+                    'mean_square_dof_vel': torch.mean(torch.square(env.dof_vel[robot_index, :])).item(),
+
                 }
             )
         elif i==stop_state_log:

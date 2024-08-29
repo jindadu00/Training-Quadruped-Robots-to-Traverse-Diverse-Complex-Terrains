@@ -117,6 +117,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
             action_rate = -0.01
             stand_still = -0.0
             dof_pos_limits = -10.0
+            stagnation=-0.0
             limbo = -0.0
             #goal_pos = 0.45
 

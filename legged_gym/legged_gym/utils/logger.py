@@ -84,8 +84,8 @@ class Logger:
         a.legend()
 
         a = axs[0, 1]
-        if log["base_pos_x"]: a.plot(time, log["base_pos_x"], label='measured')
-        a.set(xlabel='time [s]', ylabel='base pos x [m]', title='Base pos x')
+        if log["mean_square_dof_vel"]: a.plot(time, log["mean_square_dof_vel"], label='measured')
+        a.set(xlabel='time [s]', ylabel='mean_square_dof_vel', title='mean_square_dof_vel')
         a.legend()
         a = axs[1, 1]
         if log["ter_height"]: a.plot(time, log["ter_height"], label='measured')

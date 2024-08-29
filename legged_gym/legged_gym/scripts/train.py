@@ -64,7 +64,9 @@ def train(args):
         print_and_log("stand_still: " + str(env_cfg.rewards.scales.stand_still))
         print_and_log("dof_pos_limits: " + str(env_cfg.rewards.scales.dof_pos_limits))
         print_and_log("base_height_target: " + str(env_cfg.rewards.base_height_target))
+        print_and_log("stagnation: " + str(env_cfg.rewards.scales.stagnation))
         print_and_log("limbo: " + str(env_cfg.rewards.scales.limbo))
+        
     print("-----------------------------------")
 
 if __name__ == '__main__':

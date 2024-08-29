@@ -956,6 +956,9 @@ class Go2Robot(LeggedRobot):
         # penalize high contact forces
         return torch.sum((torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1) -  self.cfg.rewards.max_contact_force).clip(min=0.), dim=1)
 
+    def _reward_stagnation(self):
+        # Penalize mean base velocity is nearly zero
+        return torch.mean(torch.square(self.base_lin_vel[:, :]),dim=1)<5e-4
 
     def _reward_limbo(self):
         
