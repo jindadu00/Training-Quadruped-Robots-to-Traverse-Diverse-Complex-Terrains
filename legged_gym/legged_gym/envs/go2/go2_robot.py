@@ -744,14 +744,28 @@ class Go2Robot(LeggedRobot):
             self.custom_origins = False
             self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
             #TODO modify the inital position of the robots
-            self.env_origins[:,0:1] = torch_rand_float(3, 9, (self.num_envs,1), device=self.device)
+            self.env_origins[:,0:1] = torch_rand_float(24, 70, (self.num_envs,1), device=self.device)
             self.env_origins[:,1:2] = torch_rand_float(4, 8, (self.num_envs,1), device=self.device)
 
+
+            # center_x=torch.tensor(18, device=self.device)
+            # center_y=torch.tensor(6, device=self.device)
+            # indices = torch.where((self.env_origins[:, 0:1] >= 12) & (self.env_origins[:, 0:1] <= 24))[0]
+            # self.env_origins[indices,2:3] = - 1.0 *(center_x - torch.abs(center_x-self.env_origins[indices,0:1])) / center_x * (center_y - torch.abs(center_y-self.env_origins[indices,1:2])) / center_y
+
+            # indices = torch.where((self.env_origins[:, 0:1] >= 60) & (self.env_origins[:, 0:1] <= 72))[0]
+            # self.env_origins[indices, 2:3] = 0.33 * (self.env_origins[indices, 0:1] - 60)+0.32
+            wave_amplitude = 0.5  # Example amplitude, replace with actual value
+            # Example wave calculation (assume simple sinusoidal waves in x and y directions)
+            indices = torch.where((self.env_origins[:, 0:1] >= 46) & (self.env_origins[:, 0:1] <= 60))[0]
+            self.env_origins[indices,2:3] = wave_amplitude * torch.sin(self.env_origins[indices,0:1] / 6  * 2 * np.pi) + wave_amplitude * torch.cos(self.env_origins[indices,1:2] / 6  * 2 * np.pi)
+
+                                    
             indices = torch.where((self.env_origins[:, 0:1] >= 60) & (self.env_origins[:, 0:1] <= 72))[0]
-            self.env_origins[indices, 2:3] = 0.33 * (self.env_origins[indices, 0:1] - 60)+0.3
+            self.env_origins[indices, 2:3] = 0.33 * (self.env_origins[indices, 0:1] - 60)+0.32
 
             indices = torch.where((self.env_origins[:, 0:1] >= 72) & (self.env_origins[:, 0:1] <= 84))[0]
-            self.env_origins[indices, 2:3] = 3.7 - 0.33 * (self.env_origins[indices, 0:1] - 72)
+            self.env_origins[indices, 2:3] = 4.1 - 0.33 * (self.env_origins[indices, 0:1] - 72)
 
         else:
             self.custom_origins = False
@@ -962,18 +976,44 @@ class Go2Robot(LeggedRobot):
 
     def _reward_limbo(self):
         
-        # (45-49,4.5-7.5)
-        limbo_flag1 = (self.root_states[:, 0] > 42) & (self.root_states[:, 0] < 49) & (self.root_states[:, 1] > 4.5) & (self.root_states[:, 1] < 7.5)
-        # (57-61,7.5-10.5)
-        limbo_flag2 = (self.root_states[:, 0] > 54) & (self.root_states[:, 0] < 61) & (self.root_states[:, 1] > 7.5) & (self.root_states[:, 1] < 10.5)
-        # (57-61,1.5-4.5)
-        limbo_flag3 = (self.root_states[:, 0] > 54) & (self.root_states[:, 0] < 61) & (self.root_states[:, 1] > 1.5) & (self.root_states[:, 1] < 4.5)
-        return limbo_flag1 | limbo_flag2 | limbo_flag3
+        # # (45-49,4.5-7.5)
+        # limbo_flag1 = (self.root_states[:, 0] > 42) & (self.root_states[:, 0] < 49) & (self.root_states[:, 1] > 4.5) & (self.root_states[:, 1] < 7.5)
+        # # (57-61,7.5-10.5)
+        # limbo_flag2 = (self.root_states[:, 0] > 54) & (self.root_states[:, 0] < 61) & (self.root_states[:, 1] > 7.5) & (self.root_states[:, 1] < 10.5)
+        # # (57-61,1.5-4.5)
+        # limbo_flag3 = (self.root_states[:, 0] > 54) & (self.root_states[:, 0] < 61) & (self.root_states[:, 1] > 1.5) & (self.root_states[:, 1] < 4.5)
+        # y>11.5 or y<0.5
+        # 51<x<53 57<x<59 2<y<4 8<y<10
 
-    # def _reward_feet_height(self):
-    #     # penalize feet too low
+        limbo_flag1 = (self.root_states[:, 1] > 11.5) | (self.root_states[:, 1] < 0.5) 
+        limbo_flag21 = ((self.root_states[:, 0] > 51.0) & (self.root_states[:, 0] < 53.0))|((self.root_states[:, 0] > 57.0) & (self.root_states[:, 0] < 59.0) )
+        limbo_flag22 = ((self.root_states[:, 1] > 2.0) & (self.root_states[:, 1] < 4.0))|((self.root_states[:, 1] > 8.0) & (self.root_states[:, 1] < 10.0) )
+        limbo_flag2 = limbo_flag21 & limbo_flag22
+        return limbo_flag1 | limbo_flag2
 
-    #    #self.foot_handles = self.gym.find_asset_rigid_body_index(self.robot_asset, "hip_names")
+    def _reward_goal_pos(self):
+        # Reward for agent whose x position is larger than target when agent terminates
+        # return torch.sum((self.root_states[:, 0] - self.cfg.termination.goal_pos[0]).clip(min=0.), dim=1)
+        # print(self.root_states[:, 0])
+        # return(self.root_states[:, 0] > self.cfg.rewards.goal_position_x) & self.reset_buf
+        return self.root_states[:, 0] > self.cfg.rewards.goal_position_x
+
+    def _reward_out_mid(self):
+        wave_area=(self.root_states[:, 0] > 48) & (self.root_states[:, 0] < 60)    #48<x<60
+
+        out_of_mid_up=(self.root_states[:, 1] > 6.5) & (self.base_lin_vel[:,1]<0)  #y>6.5, v_y<0
+        out_of_mid_down=(self.root_states[:, 1] < 5.5) & (self.base_lin_vel[:,1]>0)  #y<5.5, v_y>0
+        in_area = (self.root_states[:, 1] >= 5.5)  & (self.root_states[:, 1] <= 6.5) #5.5<y<6.5
+        out_area = torch.where((out_of_mid_up | out_of_mid_down | in_area), torch.tensor(-1.0), torch.tensor(1.0))
+        return out_area * wave_area
+
+    def _reward_move_back(self):
+        return self.base_lin_vel[:,0]<0
+    
+    def _reward_feet_height(self):
+        # penalize feet too low
+
+       self.foot_handles = self.gym.find_asset_rigid_body_index(self.robot_asset, "hip_names")
     #     #self.foot_pos
     #     # heights
     #     #return torch.sum((self.root_states[:, 2].unsqueeze(1) - self.measured_heights).clip(min=0.), dim=1)

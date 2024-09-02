@@ -66,15 +66,18 @@ def play(args):
     logger = Logger(env.dt)
     robot_index = 0 # which robot is used for logging
     joint_index = 1 # which joint is used for logging
-    stop_state_log = 100 # TODO number of steps before plotting states
+    stop_state_log = 2000 # TODO number of steps before plotting states
     stop_rew_log = env.max_episode_length + 1 # number of steps before print average episode rewards
     camera_position = np.array(env_cfg.viewer.pos, dtype=np.float64)
+    # camera_position = np.array([50,0,0], dtype=np.float64)
     camera_vel = np.array([1., 1., 0.])
     camera_direction = np.array(env_cfg.viewer.lookat) - np.array(env_cfg.viewer.pos)
     img_idx = 0
     #  get input 
     #vel =x
     #obs[:,12:15] = vel.
+
+
     for i in range(10*int(env.max_episode_length)):
         actions = policy(obs.detach())
         obs, _, rews, dones, infos = env.step(actions.detach())
@@ -86,13 +89,22 @@ def play(args):
         if MOVE_CAMERA:
             camera_position += camera_vel * env.dt
             env.set_camera(camera_position, camera_position + camera_direction)
-
+        env.set_camera([60,15,5], [60,0,0])
         base_height=env.root_states[robot_index, 2] - torch.mean(env.measured_heights[robot_index])
         ter_height=torch.mean(env.measured_heights[robot_index])
         
-        # print('torch.mean(torch.square(env.base_lin_vel[:, :]),dim=1)=',torch.mean(torch.square(env.base_lin_vel[:, :]),dim=1))
-        # print(torch.mean(torch.square(env.base_lin_vel[:, :]),dim=1)<5e-4)
-        # print('torch.mean(torch.square(env.dof_vel[robot_index, :])).item()=',torch.mean(torch.square(env.dof_vel[robot_index, :])).item())
+        # wave_area=(env.root_states[:, 0] > 48) & (env.root_states[:, 0] < 60)    #48<x<60
+        # out_of_mid_up=(env.root_states[:, 1] > 6.5) & (env.base_lin_vel[:,1]>0)  #y>6.5, v_y>0
+        # out_of_mid_down=(env.root_states[:, 1] < 5.5) & (env.base_lin_vel[:,1]<0)  #y<5.5, v_y<0
+        # out_mid=(out_of_mid_up | out_of_mid_down) & wave_area
+        # result_tensor = torch.where((out_of_mid_up | out_of_mid_down), torch.tensor(-1.0), torch.tensor(1.0))
+        # print('result_tensor & wave_area:',result_tensor * wave_area)
+        limbo_flag21 = ((env.root_states[:, 0] > 51.0) & (env.root_states[:, 0] < 53.0))|((env.root_states[:, 0] > 57.0) & (env.root_states[:, 0] < 59.0) )
+        limbo_flag22 = ((env.root_states[:, 1] > 2.0) & (env.root_states[:, 1] < 4.0))|((env.root_states[:, 1] > 8.0) & (env.root_states[:, 1] < 10.0) )
+        limbo_flag2 = limbo_flag21 & limbo_flag22
+        print('x:',env.root_states[:, 0])
+        print('y:',env.root_states[:, 1])
+        print(limbo_flag2)
         if i < stop_state_log:
             logger.log_states(
                 {
@@ -113,7 +125,6 @@ def play(args):
                     'base_pos_x': env.root_states[robot_index, 0].item(),   # X direction position
                     'base_pos_y': env.root_states[robot_index, 1].item(),   # Y direction position
                     'mean_square_dof_vel': torch.mean(torch.square(env.dof_vel[robot_index, :])).item(),
-
                 }
             )
         elif i==stop_state_log:

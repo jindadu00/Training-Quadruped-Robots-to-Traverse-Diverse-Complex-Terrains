@@ -107,7 +107,9 @@ def get_load_path(root, load_run=-1, checkpoint=-1):
         #TODO sort by date to handle change of month
         runs.sort()
         if 'exported' in runs: runs.remove('exported')
-        last_run = os.path.join(root, runs[-1])
+        print('runs:',runs)
+        last_run = os.path.join(root, runs[-3])
+        print('last_run:',last_run)
     except:
         raise ValueError("No runs in this directory: " + root)
     if load_run==-1:
@@ -115,6 +117,7 @@ def get_load_path(root, load_run=-1, checkpoint=-1):
     else:
         load_run = os.path.join(root, load_run)
 
+    print('load_run:',load_run)
     if checkpoint==-1:
         models = [file for file in os.listdir(load_run) if 'model' in file]
         models.sort(key=lambda m: '{0:0>15}'.format(m))
@@ -123,6 +126,8 @@ def get_load_path(root, load_run=-1, checkpoint=-1):
         model = "model_{}.pt".format(checkpoint) 
 
     load_path = os.path.join(load_run, model)
+    print('------------loading-----------------')
+    print('load_path:', load_path)
     return load_path
 
 def update_cfg_from_args(env_cfg, cfg_train, args):
@@ -132,6 +137,12 @@ def update_cfg_from_args(env_cfg, cfg_train, args):
         if args.num_envs is not None:
             env_cfg.env.num_envs = args.num_envs
 # 更新奖励函数的具体参数
+
+        if args.base_height_target is not None:
+            env_cfg.rewards.base_height_target = args.base_height_target
+        if args.goal_position_x is not None:
+            env_cfg.rewards.goal_position_x = args.goal_position_x
+
         if args.termination is not None:
             env_cfg.rewards.scales.termination = args.termination
         if args.tracking_lin_vel is not None:
@@ -164,12 +175,16 @@ def update_cfg_from_args(env_cfg, cfg_train, args):
             env_cfg.rewards.scales.stand_still = args.stand_still
         if args.dof_pos_limits is not None:
             env_cfg.rewards.scales.dof_pos_limits = args.dof_pos_limits
-        if args.base_height_target is not None:
-            env_cfg.rewards.base_height_target = args.base_height_target
         if args.stagnation is not None:
             env_cfg.rewards.scales.stagnation = args.stagnation
         if args.limbo is not None:
             env_cfg.rewards.scales.limbo = args.limbo
+        if args.goal_pos is not None:
+            env_cfg.rewards.scales.goal_pos = args.goal_pos
+        if args.out_mid is not None:
+            env_cfg.rewards.scales.out_mid = args.out_mid
+        if args.move_back is not None:
+            env_cfg.rewards.scales.move_back = args.move_back
 
     if cfg_train is not None:
         if args.seed is not None:
@@ -181,6 +196,8 @@ def update_cfg_from_args(env_cfg, cfg_train, args):
             cfg_train.runner.resume = args.resume
         if args.experiment_name is not None:
             cfg_train.runner.experiment_name = args.experiment_name
+        if args.model_dir is not None:
+            cfg_train.runner.model_dir = args.model_dir
         if args.run_name is not None:
             cfg_train.runner.run_name = args.run_name
         if args.load_run is not None:
@@ -198,13 +215,20 @@ def get_args():
         {"name": "--run_name", "type": str,  "help": "Name of the run. Overrides config file if provided."},
         {"name": "--load_run", "type": str,  "help": "Name of the run to load when resume=True. If -1: will load the last run. Overrides config file if provided."},
         {"name": "--checkpoint", "type": int,  "help": "Saved model checkpoint number. If -1: will load the last checkpoint. Overrides config file if provided."},
+        {"name": "--model_dir", "type": str, "default": None,  "help": "model dir if resume. Overrides config file if provided."},
+
+
         
+
         {"name": "--headless", "action": "store_true", "default": False, "help": "Force display off at all times"},
         {"name": "--horovod", "action": "store_true", "default": False, "help": "Use horovod for multi-gpu training"},
         {"name": "--rl_device", "type": str, "default": "cuda:0", "help": 'Device used by the RL algorithm, (cpu, gpu, cuda:0, cuda:1 etc..)'},
         {"name": "--num_envs", "type": int, "help": "Number of environments to create. Overrides config file if provided."},
         {"name": "--seed", "type": int, "help": "Random seed. Overrides config file if provided."},
         {"name": "--max_iterations", "type": int, "help": "Maximum number of training iterations. Overrides config file if provided."},
+
+        {"name": "--base_height_target", "type": float, "default": Go2RoughCfg.rewards.base_height_target, "help": "base height target."},
+        {"name": "--goal_position_x", "type": float, "default": Go2RoughCfg.rewards.goal_position_x, "help": "goal position x."},
 
 
         {"name": "--termination", "type": float, "default": Go2RoughCfg.rewards.scales.termination, "help": "Reward for termination."},
@@ -223,9 +247,13 @@ def get_args():
         {"name": "--action_rate", "type": float, "default": Go2RoughCfg.rewards.scales.action_rate, "help": "Penalty for rapid changes in actions."},
         {"name": "--stand_still", "type": float, "default": Go2RoughCfg.rewards.scales.stand_still, "help": "Penalty for motion when standing still."},
         {"name": "--dof_pos_limits", "type": float, "default": Go2RoughCfg.rewards.scales.dof_pos_limits, "help": "Penalty for exceeding DOF position limits."},
-        {"name": "--base_height_target", "type": float, "default": Go2RoughCfg.rewards.base_height_target, "help": "Penalty for base height target."},
         {"name": "--stagnation", "type": float, "default": Go2RoughCfg.rewards.scales.stagnation, "help": "Penalty for stagnation."},
         {"name": "--limbo", "type": float, "default": Go2RoughCfg.rewards.scales.limbo, "help": "Penalty for limbo."},
+        {"name": "--goal_pos", "type": float, "default": Go2RoughCfg.rewards.scales.goal_pos, "help": "Reward for reaching goal pos."},
+        {"name": "--out_mid", "type": float, "default": Go2RoughCfg.rewards.scales.out_mid, "help": "punish for out mid line in some area."},
+        {"name": "--move_back", "type": float, "default": Go2RoughCfg.rewards.scales.move_back, "help": "punish for moving back."},
+
+        
     ]
     # parse arguments
     args = gymutil.parse_arguments(

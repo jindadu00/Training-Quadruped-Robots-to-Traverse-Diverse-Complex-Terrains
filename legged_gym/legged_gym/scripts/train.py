@@ -39,7 +39,7 @@ import torch
 
 def train(args):
     env, env_cfg = task_registry.make_env(name=args.task, args=args)
-    ppo_runner, train_cfg, dir_log = task_registry.make_alg_runner(env=env, name=args.task, args=args)
+    ppo_runner, train_cfg, dir_log = task_registry.make_alg_runner(env=env, name=args.task, args=args, log_root="/home/jinda/Desktop/competition/legged_gym")
     ppo_runner.learn(num_learning_iterations=train_cfg.runner.max_iterations, init_at_random_ep_len=True, dir_log=dir_log)
     log_file_path = os.path.join(dir_log, "rewards_settings.txt")
     print("-----------------------------------")
@@ -47,6 +47,9 @@ def train(args):
         def print_and_log(message):
             print(message)
             f.write(message + "\n")
+        print_and_log("base_height_target: " + str(env_cfg.rewards.base_height_target))
+        print_and_log("goal_position_x: " + str(env_cfg.rewards.goal_position_x))
+        print("-----------------------------------")
         print_and_log("termination: " + str(env_cfg.rewards.scales.termination))
         print_and_log("tracking_lin_vel: " + str(env_cfg.rewards.scales.tracking_lin_vel))
         print_and_log("tracking_ang_vel: " + str(env_cfg.rewards.scales.tracking_ang_vel))
@@ -63,9 +66,11 @@ def train(args):
         print_and_log("action_rate: " + str(env_cfg.rewards.scales.action_rate))
         print_and_log("stand_still: " + str(env_cfg.rewards.scales.stand_still))
         print_and_log("dof_pos_limits: " + str(env_cfg.rewards.scales.dof_pos_limits))
-        print_and_log("base_height_target: " + str(env_cfg.rewards.base_height_target))
         print_and_log("stagnation: " + str(env_cfg.rewards.scales.stagnation))
         print_and_log("limbo: " + str(env_cfg.rewards.scales.limbo))
+        print_and_log("goal_pos: " + str(env_cfg.rewards.scales.goal_pos))
+        print_and_log("out_mid: " + str(env_cfg.rewards.scales.out_mid))
+        print_and_log("move_back: " + str(env_cfg.rewards.scales.move_back))
         
     print("-----------------------------------")
 

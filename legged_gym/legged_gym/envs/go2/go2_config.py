@@ -10,7 +10,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         num_actions = 12
         env_spacing = 3.  # not used with heightfields/trimeshes 
         send_timeouts = True # send time out information to the algorithm
-        episode_length_s = 300 # episode length in seconds
+        episode_length_s = 200 # episode length in seconds
     class terrain( LeggedRobotCfg.env ):
         mesh_type = 'competition' # "heightfield" # none, plane, heightfield or trimesh
         horizontal_scale = 0.25 # [m]
@@ -61,7 +61,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         resampling_time = 10. # time before command are changed[s]
         heading_command = True # if true: compute ang vel command from heading error
         class ranges:
-            lin_vel_x = [0.5, 0.5] # min max [m/s]
+            lin_vel_x = [0.8, 0.8] # min max [m/s]
             lin_vel_y = [0., 0.]   # min max [m/s]
             ang_vel_yaw = [0., 0.]    # min max [rad/s]
             heading = [0, 0]
@@ -102,7 +102,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
     class rewards( LeggedRobotCfg.rewards ):
         class scales( LeggedRobotCfg.rewards.scales ):
             termination = -0.0
-            tracking_lin_vel = 1.0
+            tracking_lin_vel = 2.0
             tracking_ang_vel = 0.5
             lin_vel_z = -0.001
             ang_vel_xy = -0.05
@@ -119,7 +119,9 @@ class Go2RoughCfg( LeggedRobotCfg ):
             dof_pos_limits = -10.0
             stagnation=-0.0
             limbo = -0.0
-            #goal_pos = 0.45
+            goal_pos = 0.0
+            out_mid = -0.0
+            move_back = -0.0
 
 # step 1 
 # negtive reward -> -0.001
@@ -143,6 +145,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         soft_torque_limit = 1.
         base_height_target = 0.3
         max_contact_force = 100. # forces above this value are penalized
+        goal_position_x = 46 #TODO
 
 class Go2RoughCfgPPO( LeggedRobotCfgPPO ):
     class algorithm( LeggedRobotCfgPPO.algorithm ):
@@ -150,7 +153,7 @@ class Go2RoughCfgPPO( LeggedRobotCfgPPO ):
     class runner( LeggedRobotCfgPPO.runner ):
         run_name = ''
         experiment_name = ''
-
+        model_dir = None
   
         policy_class_name = 'ActorCritic'
         algorithm_class_name = 'PPO'

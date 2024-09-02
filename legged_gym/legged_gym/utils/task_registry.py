@@ -141,15 +141,20 @@ class TaskRegistry():
         elif log_root is None:
             log_dir = None
         else:
+            log_root = os.path.join(log_root, 'logs', train_cfg.runner.experiment_name)
             log_dir = os.path.join(log_root, datetime.now().strftime('%b%d_%H-%M-%S') + '_' + train_cfg.runner.run_name)
         
         train_cfg_dict = class_to_dict(train_cfg)
         runner = OnPolicyRunner(env, train_cfg_dict, log_dir, device=args.rl_device)
         #save resume path before creating a new log_dir
         resume = train_cfg.runner.resume
+
         if resume:
             # load previously trained model
-            resume_path = get_load_path(log_root, load_run=train_cfg.runner.load_run, checkpoint=train_cfg.runner.checkpoint)
+            if train_cfg.runner.model_dir:
+                resume_path = get_load_path(train_cfg.runner.model_dir, load_run="", checkpoint=train_cfg.runner.checkpoint)
+            else:
+                resume_path = get_load_path(log_root, load_run=train_cfg.runner.load_run, checkpoint=train_cfg.runner.checkpoint)
             print(f"Loading model from: {resume_path}")
             runner.load(resume_path)
         return runner, train_cfg, log_dir
