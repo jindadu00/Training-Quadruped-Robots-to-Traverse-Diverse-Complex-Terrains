@@ -21,6 +21,29 @@ from .go2_config import Go2RoughCfg
 from  legged_gym.envs.base.legged_robot import LeggedRobot
 #from legged_gym.utils.isaacgym_utils import get_euler_xyz as get_euler_xyz_in_tensor
 
+def euler_from_quaternion(quat_angle):
+        """
+        Convert a quaternion into euler angles (roll, pitch, yaw)
+        roll is rotation around x in radians (counterclockwise)
+        pitch is rotation around y in radians (counterclockwise)
+        yaw is rotation around z in radians (counterclockwise)
+        """
+        x = quat_angle[:,0]; y = quat_angle[:,1]; z = quat_angle[:,2]; w = quat_angle[:,3]
+        t0 = +2.0 * (w * x + y * z)
+        t1 = +1.0 - 2.0 * (x * x + y * y)
+        roll_x = torch.atan2(t0, t1)
+     
+        t2 = +2.0 * (w * y - z * x)
+        t2 = torch.clip(t2, -1, 1)
+        pitch_y = torch.asin(t2)
+     
+        t3 = +2.0 * (w * z + x * y)
+        t4 = +1.0 - 2.0 * (y * y + z * z)
+        yaw_z = torch.atan2(t3, t4)
+     
+        return roll_x, pitch_y, yaw_z # in radians
+
+
 class Go2Robot(LeggedRobot):
     cfg: Go2RoughCfg
 
@@ -48,7 +71,28 @@ class Go2Robot(LeggedRobot):
         self.obs_buf = torch.clip(self.obs_buf, -clip_obs, clip_obs)
         if self.privileged_obs_buf is not None:
             self.privileged_obs_buf = torch.clip(self.privileged_obs_buf, -clip_obs, clip_obs)
+        self.extras["delta_yaw_ok"] = self.delta_yaw < 0.6
+
         return self.obs_buf, self.privileged_obs_buf, self.rew_buf, self.reset_buf, self.extras
+
+    def _update_goals(self):
+        next_flag = self.reach_goal_timer > self.cfg.env.reach_goal_delay / self.dt
+        self.cur_goal_idx[next_flag] += 1
+        self.reach_goal_timer[next_flag] = 0
+
+        self.reached_goal_ids = torch.norm(self.root_states[:, :2] - self.cur_goals[:, :2], dim=1) < self.cfg.env.next_goal_threshold
+        self.reach_goal_timer[self.reached_goal_ids] += 1
+
+        self.target_pos_rel = self.cur_goals[:, :2] - self.root_states[:, :2]
+        self.next_target_pos_rel = self.next_goals[:, :2] - self.root_states[:, :2]
+
+        norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)
+        target_vec_norm = self.target_pos_rel / (norm + 1e-5)
+        self.target_yaw = torch.atan2(target_vec_norm[:, 1], target_vec_norm[:, 0])
+
+        norm = torch.norm(self.next_target_pos_rel, dim=-1, keepdim=True)
+        target_vec_norm = self.next_target_pos_rel / (norm + 1e-5)
+        self.next_target_yaw = torch.atan2(target_vec_norm[:, 1], target_vec_norm[:, 0])
 
     def post_physics_step(self):
         """ check terminations, compute observations and rewards
@@ -67,6 +111,14 @@ class Go2Robot(LeggedRobot):
         self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
 
+        self.roll, self.pitch, self.yaw = euler_from_quaternion(self.base_quat)
+
+        contact = torch.norm(self.contact_forces[:, self.feet_indices], dim=-1) > 2.
+        self.contact_filt = torch.logical_or(contact, self.last_contacts) 
+        self.last_contacts = contact
+        
+        
+        self._update_goals()
         self._post_physics_step_callback()
 
         # compute observations, rewards, resets, ...
@@ -74,6 +126,10 @@ class Go2Robot(LeggedRobot):
         self.compute_reward()
         env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
         self.reset_idx(env_ids)
+
+        self.cur_goals = self._gather_cur_goals()
+        self.next_goals = self._gather_cur_goals(future=1)
+
         self.compute_observations() # in some cases a simulation step might be required to refresh some obs (for example body positions)
 
         self.last_actions[:] = self.actions[:]
@@ -87,12 +143,21 @@ class Go2Robot(LeggedRobot):
         """ Check if environments need to be reset
         """
         self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
+        roll_cutoff = torch.abs(self.roll) > 1.5
+        pitch_cutoff = torch.abs(self.pitch) > 1.5
+        reach_goal_cutoff = self.cur_goal_idx >= self.cfg.terrain.num_goals
+
         self.time_out_buf = self.episode_length_buf > self.max_episode_length # no terminal reward for time-outs
+        self.time_out_buf |= reach_goal_cutoff
+
         self.reset_buf |= self.time_out_buf
 
         base_z = self.root_states[:, 2]
         z_threshold_buff = base_z < -3
         self.reset_buf |= z_threshold_buff
+        self.reset_buf |= self.time_out_buf
+        self.reset_buf |= roll_cutoff
+        self.reset_buf |= pitch_cutoff
 
     def reset_idx(self, env_ids):
         """ Reset some environments.
@@ -125,6 +190,9 @@ class Go2Robot(LeggedRobot):
         self.feet_air_time[env_ids] = 0.
         self.episode_length_buf[env_ids] = 0
         self.reset_buf[env_ids] = 1
+        self.cur_goal_idx[env_ids] = 0
+        self.reach_goal_timer[env_ids] = 0
+
         # fill extras
         self.extras["episode"] = {}
         for key in self.episode_sums.keys():
@@ -161,10 +229,17 @@ class Go2Robot(LeggedRobot):
     def compute_observations(self):
         """ Computes observations
         """
+        if self.global_counter % 5 == 0:
+            self.delta_yaw = self.target_yaw - self.yaw
+            self.delta_next_yaw = self.next_target_yaw - self.yaw
+
         self.obs_buf = torch.cat((  self.base_lin_vel * self.obs_scales.lin_vel,  # linear velocity
                                     self.base_ang_vel  * self.obs_scales.ang_vel,  # angular velocity
                                     self.projected_gravity,                       # pose 姿态
-                                    self.commands[:, :3] * self.commands_scale,   # x,y 方向的线速度，以及yaw偏航角速度
+                                    self.delta_yaw[:, None],
+                                    self.delta_next_yaw[:, None],
+                                    self.commands[:, 0:1] * self.commands_scale,   # 速度   [1,1]
+                                    self.env_class.float(),
                                     (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,  # 每个关节的残差
                                     self.dof_vel * self.obs_scales.dof_vel,    # 每个关节的速度
                                     self.actions,  # policy输出的action
@@ -341,6 +416,10 @@ class Go2Robot(LeggedRobot):
             self.measured_heights = self._get_heights()
         if self.cfg.domain_rand.push_robots and  (self.common_step_counter % self.cfg.domain_rand.push_interval == 0):
             self._push_robots()
+
+    def _gather_cur_goals(self, future=0):
+        return self.env_goals.gather(1, (self.cur_goal_idx[:, None, None]+future).expand(-1, -1, self.env_goals.shape[-1])).squeeze(1)
+
 
     def _resample_commands(self, env_ids):
         """ Randommly select commands of some environments
@@ -534,6 +613,8 @@ class Go2Robot(LeggedRobot):
         self.last_actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_dof_vel = torch.zeros_like(self.dof_vel)
         self.last_root_vel = torch.zeros_like(self.root_states[:, 7:13])
+        self.reach_goal_timer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+
         self.commands = torch.zeros(self.num_envs, self.cfg.commands.num_commands, dtype=torch.float, device=self.device, requires_grad=False) # x vel, y vel, yaw vel, heading
         self.commands_scale = torch.tensor([self.obs_scales.lin_vel, self.obs_scales.lin_vel, self.obs_scales.ang_vel], device=self.device, requires_grad=False,) # TODO change this
         self.feet_air_time = torch.zeros(self.num_envs, self.feet_indices.shape[0], dtype=torch.float, device=self.device, requires_grad=False)
@@ -729,6 +810,8 @@ class Go2Robot(LeggedRobot):
         """ Sets environment origins. On rough terrain the origins are defined by the terrain platforms.
             Otherwise create a grid.
         """
+        self.env_origins[:] = self.terrain_origins[self.terrain_levels, self.terrain_types]
+        self.env_goals = torch.zeros(self.num_envs, self.cfg.terrain.num_goals + self.cfg.env.num_future_goal_obs, 3, device=self.device, requires_grad=False)
         if self.cfg.terrain.mesh_type in ["heightfield", "trimesh"]:
             self.custom_origins = True
             self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
@@ -739,7 +822,8 @@ class Go2Robot(LeggedRobot):
             self.terrain_types = torch.div(torch.arange(self.num_envs, device=self.device), (self.num_envs/self.cfg.terrain.num_cols), rounding_mode='floor').to(torch.long)
             self.max_terrain_level = self.cfg.terrain.num_rows
             self.terrain_origins = torch.from_numpy(self.terrain.env_origins).to(self.device).to(torch.float)
-            self.env_origins[:] = self.terrain_origins[self.terrain_levels, self.terrain_types]
+            self.cur_goal_idx = torch.zeros(self.num_envs, device=self.device, requires_grad=False, dtype=torch.long)
+
         elif self.cfg.terrain.mesh_type in ["competition"]:
             self.custom_origins = False
             self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
@@ -798,6 +882,8 @@ class Go2Robot(LeggedRobot):
         # draw height lines
         if not self.terrain.cfg.measure_heights:
             return
+        self._draw_goals()
+        self._draw_feet()
         self.gym.clear_lines(self.viewer)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
         sphere_geom = gymutil.WireframeSphereGeometry(0.02, 4, 4, None, color=(1, 1, 0))
@@ -813,6 +899,56 @@ class Go2Robot(LeggedRobot):
                 z = heights[j]
                 sphere_pose = gymapi.Transform(gymapi.Vec3(x, y, z), r=None)
                 gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], sphere_pose) 
+
+
+    def _draw_goals(self):
+        sphere_geom = gymutil.WireframeSphereGeometry(0.1, 32, 32, None, color=(1, 0, 0))
+        sphere_geom_cur = gymutil.WireframeSphereGeometry(0.1, 32, 32, None, color=(0, 0, 1))
+        sphere_geom_reached = gymutil.WireframeSphereGeometry(self.cfg.env.next_goal_threshold, 32, 32, None, color=(0, 1, 0))
+        goals = self.terrain_goals[self.terrain_levels[self.lookat_id], self.terrain_types[self.lookat_id]].cpu().numpy()
+        for i, goal in enumerate(goals):
+            goal_xy = goal[:2] + self.terrain.cfg.border_size
+            pts = (goal_xy/self.terrain.cfg.horizontal_scale).astype(int)
+            goal_z = self.height_samples[pts[0], pts[1]].cpu().item() * self.terrain.cfg.vertical_scale
+            pose = gymapi.Transform(gymapi.Vec3(goal[0], goal[1], goal_z), r=None)
+            if i == self.cur_goal_idx[self.lookat_id].cpu().item():
+                gymutil.draw_lines(sphere_geom_cur, self.gym, self.viewer, self.envs[self.lookat_id], pose)
+                if self.reached_goal_ids[self.lookat_id]:
+                    gymutil.draw_lines(sphere_geom_reached, self.gym, self.viewer, self.envs[self.lookat_id], pose)
+            else:
+                gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[self.lookat_id], pose)
+        
+        if not self.cfg.depth.use_camera:
+            sphere_geom_arrow = gymutil.WireframeSphereGeometry(0.02, 16, 16, None, color=(1, 0.35, 0.25))
+            pose_robot = self.root_states[self.lookat_id, :3].cpu().numpy()
+            for i in range(5):
+                norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)
+                target_vec_norm = self.target_pos_rel / (norm + 1e-5)
+                pose_arrow = pose_robot[:2] + 0.1*(i+3) * target_vec_norm[self.lookat_id, :2].cpu().numpy()
+                pose = gymapi.Transform(gymapi.Vec3(pose_arrow[0], pose_arrow[1], pose_robot[2]), r=None)
+                gymutil.draw_lines(sphere_geom_arrow, self.gym, self.viewer, self.envs[self.lookat_id], pose)
+            
+            sphere_geom_arrow = gymutil.WireframeSphereGeometry(0.02, 16, 16, None, color=(0, 1, 0.5))
+            for i in range(5):
+                norm = torch.norm(self.next_target_pos_rel, dim=-1, keepdim=True)
+                target_vec_norm = self.next_target_pos_rel / (norm + 1e-5)
+                pose_arrow = pose_robot[:2] + 0.2*(i+3) * target_vec_norm[self.lookat_id, :2].cpu().numpy()
+                pose = gymapi.Transform(gymapi.Vec3(pose_arrow[0], pose_arrow[1], pose_robot[2]), r=None)
+                gymutil.draw_lines(sphere_geom_arrow, self.gym, self.viewer, self.envs[self.lookat_id], pose)
+        
+    def _draw_feet(self):
+        if hasattr(self, 'feet_at_edge'):
+            non_edge_geom = gymutil.WireframeSphereGeometry(0.02, 16, 16, None, color=(0, 1, 0))
+            edge_geom = gymutil.WireframeSphereGeometry(0.02, 16, 16, None, color=(1, 0, 0))
+
+            feet_pos = self.rigid_body_states[:, self.feet_indices, :3]
+            for i in range(4):
+                pose = gymapi.Transform(gymapi.Vec3(feet_pos[self.lookat_id, i, 0], feet_pos[self.lookat_id, i, 1], feet_pos[self.lookat_id, i, 2]), r=None)
+                if self.feet_at_edge[self.lookat_id, i]:
+                    gymutil.draw_lines(edge_geom, self.gym, self.viewer, self.envs[i], pose)
+                else:
+                    gymutil.draw_lines(non_edge_geom, self.gym, self.viewer, self.envs[i], pose)
+
 
     def _init_height_points(self):
         """ Returns points at which the height measurments are sampled (in base frame)
@@ -892,12 +1028,22 @@ class Go2Robot(LeggedRobot):
         # Penalize base height away from target
         base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
         return torch.square(base_height - self.cfg.rewards.base_height_target)
+
+    def _reward_delta_torques(self):
+        return torch.sum(torch.square(self.torques - self.last_torques), dim=1)
     
     def _reward_torques(self):
         # Penalize torques
         # print('torch.square(self.torques)',torch.square(self.torques))
         return torch.sum(torch.square(self.torques), dim=1)
 
+    def _reward_hip_pos(self):
+        return torch.sum(torch.square(self.dof_pos[:, self.hip_indices] - self.default_dof_pos[:, self.hip_indices]), dim=1)
+
+    def _reward_dof_error(self):
+        dof_error = torch.sum(torch.square(self.dof_pos - self.default_dof_pos), dim=1)
+        return dof_error
+    
     def _reward_dof_vel(self):
         # Penalize dof velocities
         return torch.sum(torch.square(self.dof_vel), dim=1)
@@ -1009,6 +1155,27 @@ class Go2Robot(LeggedRobot):
 
     def _reward_move_back(self):
         return self.base_lin_vel[:,0]<0
+
+    def _reward_tracking_goal_vel(self):
+        norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)
+        target_vec_norm = self.target_pos_rel / (norm + 1e-5)
+        cur_vel = self.root_states[:, 7:9]
+        rew = torch.minimum(torch.sum(target_vec_norm * cur_vel, dim=-1), self.commands[:, 0]) / (self.commands[:, 0] + 1e-5)
+        return rew
+
+    def _reward_tracking_yaw(self):
+        rew = torch.exp(-torch.abs(self.target_yaw - self.yaw))
+        return rew
+
+    def _reward_feet_edge(self):
+        feet_pos_xy = ((self.rigid_body_states[:, self.feet_indices, :2] + self.terrain.cfg.border_size) / self.cfg.terrain.horizontal_scale).round().long()  # (num_envs, 4, 2)
+        feet_pos_xy[..., 0] = torch.clip(feet_pos_xy[..., 0], 0, self.x_edge_mask.shape[0]-1)
+        feet_pos_xy[..., 1] = torch.clip(feet_pos_xy[..., 1], 0, self.x_edge_mask.shape[1]-1)
+        feet_at_edge = self.x_edge_mask[feet_pos_xy[..., 0], feet_pos_xy[..., 1]]
+    
+        self.feet_at_edge = self.contact_filt & feet_at_edge
+        rew = (self.terrain_levels > 3) * torch.sum(self.feet_at_edge, dim=-1)
+        return rew
     
     def _reward_feet_height(self):
         # penalize feet too low

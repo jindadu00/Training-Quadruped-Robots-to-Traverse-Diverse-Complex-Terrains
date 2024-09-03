@@ -101,27 +101,44 @@ class Go2RoughCfg( LeggedRobotCfg ):
 
     class rewards( LeggedRobotCfg.rewards ):
         class scales( LeggedRobotCfg.rewards.scales ):
-            termination = -0.0
-            tracking_lin_vel = 2.0
-            tracking_ang_vel = 0.5
-            lin_vel_z = -0.001
+            # tracking rewards
+            tracking_goal_vel = 1.5
+            tracking_yaw = 0.5
+            # regularization rewards
+            lin_vel_z = -1.0
             ang_vel_xy = -0.05
-            orientation = -1.0
-            torques = -0.0002
-            dof_vel = -0.0
-            dof_acc = -2.5e-07
-            base_height = -0.0001
-            feet_air_time = 1.0
-            collision = -1.0
-            feet_stumble = -0.0
-            action_rate = -0.01
-            stand_still = -0.0
-            dof_pos_limits = -10.0
-            stagnation=-0.0
-            limbo = -0.0
-            goal_pos = 0.0
-            out_mid = -0.0
-            move_back = -0.0
+            orientation = -1.
+            dof_acc = -2.5e-7
+            collision = -10.
+            action_rate = -0.1
+            delta_torques = -1.0e-7
+            torques = -0.00001
+            hip_pos = -0.5
+            dof_error = -0.04
+            feet_stumble = -1
+            feet_edge = -1
+
+            # termination = -0.0
+            # tracking_lin_vel = 2.0
+            # tracking_ang_vel = 0.5
+            # lin_vel_z = -0.001
+            # ang_vel_xy = -0.05
+            # orientation = -1.0
+            # torques = -0.0002
+            # dof_vel = -0.0
+            # dof_acc = -2.5e-07
+            # base_height = -0.0001
+            # feet_air_time = 1.0
+            # collision = -1.0
+            # feet_stumble = -0.0
+            # action_rate = -0.01
+            # stand_still = -0.0
+            # dof_pos_limits = -10.0
+            # stagnation=-0.0
+            # limbo = -0.0
+            # goal_pos = 0.0
+            # out_mid = -0.0
+            # move_back = -0.0
 
 # step 1 
 # negtive reward -> -0.001
