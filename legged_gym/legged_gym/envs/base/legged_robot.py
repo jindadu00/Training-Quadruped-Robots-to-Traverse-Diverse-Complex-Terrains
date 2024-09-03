@@ -65,7 +65,7 @@ class LeggedRobot(BaseTask):
         self.cfg = cfg
         self.sim_params = sim_params
         self.height_samples = None
-        self.debug_viz = False
+        self.debug_viz = True
         self.init_done = False
         self._parse_cfg(self.cfg)
         super().__init__(self.cfg, sim_params, physics_engine, sim_device, headless)
@@ -75,6 +75,11 @@ class LeggedRobot(BaseTask):
         self._init_buffers()
         self._prepare_reward_function()
         self.init_done = True
+        self.global_counter = 0
+        self.total_env_steps_counter = 0
+
+        self.reset_idx(torch.arange(self.num_envs, device=self.device))
+        self.post_physics_step()
 
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()

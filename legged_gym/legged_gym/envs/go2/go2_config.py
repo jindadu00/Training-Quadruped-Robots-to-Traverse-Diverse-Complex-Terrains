@@ -4,13 +4,45 @@ class Go2RoughCfg( LeggedRobotCfg ):
 
     class env( LeggedRobotCfg.env ):
         num_envs = 4096
-        num_observations = 235
+        num_observations = 238
         symmetric = False  #True :  set num_privileged_obs = None;    false: num_privileged_obs = observations + 187 ,set "terrain.measure_heights" to true
-        num_privileged_obs = 235
+        num_privileged_obs = 238
         num_actions = 12
         env_spacing = 3.  # not used with heightfields/trimeshes 
         send_timeouts = True # send time out information to the algorithm
         episode_length_s = 200 # episode length in seconds
+
+
+        history_encoding = True
+        reorder_dofs = True
+        # additional visual inputs 
+        include_foot_contacts = True
+        
+        randomize_start_pos = False
+        randomize_start_vel = False
+        randomize_start_yaw = False
+        rand_yaw_range = 1.2
+        randomize_start_y = False
+        rand_y_range = 0.5
+        randomize_start_pitch = False
+        rand_pitch_range = 1.6
+
+        contact_buf_len = 100
+
+        next_goal_threshold = 0.2
+        reach_goal_delay = 0.1
+        num_future_goal_obs = 2
+        coordinates = [
+            [6.0, 7.0, 3.0],
+            [6.0, 7.0, 0.0],  # 第一列的三维坐标
+            [7.0, 6.0, 0.0],  # 第二列的三维坐标
+            [8.0, 7.0, 0.0],  # 第三列的三维坐标
+            [9.0, 6.0, 0.0],  # 第四列的三维坐标
+            [9.0, 7.0, 0.0],  # 第四列的三维坐标
+        ]
+        lookat_id=0
+
+
     class terrain( LeggedRobotCfg.env ):
         mesh_type = 'competition' # "heightfield" # none, plane, heightfield or trimesh
         horizontal_scale = 0.25 # [m]
@@ -35,6 +67,8 @@ class Go2RoughCfg( LeggedRobotCfg ):
         terrain_proportions = [0,1, 0, 0, 0]
         # trimesh only:
         slope_treshold = 0.75 # slopes above this threshold will be corrected to vertical surfaces
+        #TODO modify the number of goals
+        num_goals = 8
 
     class init_state( LeggedRobotCfg.init_state ):
         pos = [0.0, 0.0, 0.42] # x,y,z [m]
@@ -98,9 +132,32 @@ class Go2RoughCfg( LeggedRobotCfg ):
 
         randomize_motor = False
         motor_strength_range = [0.8, 1.2]
+        action_buf_len = 8
 
     class rewards( LeggedRobotCfg.rewards ):
         class scales( LeggedRobotCfg.rewards.scales ):
+            termination = -0.0
+            tracking_lin_vel = 0.0
+            tracking_ang_vel = 0.0
+            lin_vel_z = -0.00
+            ang_vel_xy = -0.0
+            orientation = -0.0
+            torques = -0.000
+            dof_vel = -0.0
+            dof_acc = -0.0
+            base_height = -0.000
+            feet_air_time = 0.0
+            collision = -0.0
+            feet_stumble = -0.0
+            action_rate = -0.0
+            stand_still = -0.0
+            dof_pos_limits = -0.0
+            stagnation=-0.0
+            limbo = -0.0
+            goal_pos = 0.0
+            out_mid = -0.0
+            move_back = -0.0
+
             # tracking rewards
             tracking_goal_vel = 1.5
             tracking_yaw = 0.5
@@ -116,7 +173,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
             hip_pos = -0.5
             dof_error = -0.04
             feet_stumble = -1
-            feet_edge = -1
+            # feet_edge = -1
 
             # termination = -0.0
             # tracking_lin_vel = 2.0

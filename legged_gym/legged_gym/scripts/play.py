@@ -89,7 +89,6 @@ def play(args):
         if MOVE_CAMERA:
             camera_position += camera_vel * env.dt
             env.set_camera(camera_position, camera_position + camera_direction)
-        env.set_camera([60,15,5], [60,0,0])
         base_height=env.root_states[robot_index, 2] - torch.mean(env.measured_heights[robot_index])
         ter_height=torch.mean(env.measured_heights[robot_index])
         
@@ -99,12 +98,12 @@ def play(args):
         # out_mid=(out_of_mid_up | out_of_mid_down) & wave_area
         # result_tensor = torch.where((out_of_mid_up | out_of_mid_down), torch.tensor(-1.0), torch.tensor(1.0))
         # print('result_tensor & wave_area:',result_tensor * wave_area)
-        limbo_flag21 = ((env.root_states[:, 0] > 51.0) & (env.root_states[:, 0] < 53.0))|((env.root_states[:, 0] > 57.0) & (env.root_states[:, 0] < 59.0) )
-        limbo_flag22 = ((env.root_states[:, 1] > 2.0) & (env.root_states[:, 1] < 4.0))|((env.root_states[:, 1] > 8.0) & (env.root_states[:, 1] < 10.0) )
-        limbo_flag2 = limbo_flag21 & limbo_flag22
-        print('x:',env.root_states[:, 0])
-        print('y:',env.root_states[:, 1])
-        print(limbo_flag2)
+        # limbo_flag21 = ((env.root_states[:, 0] > 51.0) & (env.root_states[:, 0] < 53.0))|((env.root_states[:, 0] > 57.0) & (env.root_states[:, 0] < 59.0) )
+        # limbo_flag22 = ((env.root_states[:, 1] > 2.0) & (env.root_states[:, 1] < 4.0))|((env.root_states[:, 1] > 8.0) & (env.root_states[:, 1] < 10.0) )
+        # limbo_flag2 = limbo_flag21 & limbo_flag22
+        # print('x:',env.root_states[:, 0])
+        # print('y:',env.root_states[:, 1])
+        # print(limbo_flag2)
         if i < stop_state_log:
             logger.log_states(
                 {

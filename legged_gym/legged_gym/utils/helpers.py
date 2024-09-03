@@ -133,6 +133,7 @@ def get_load_path(root, load_run=-1, checkpoint=-1):
 def update_cfg_from_args(env_cfg, cfg_train, args):
     # seed
     if env_cfg is not None:
+
         # num envs
         if args.num_envs is not None:
             env_cfg.env.num_envs = args.num_envs

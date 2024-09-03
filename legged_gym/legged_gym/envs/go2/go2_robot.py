@@ -117,7 +117,7 @@ class Go2Robot(LeggedRobot):
         self.contact_filt = torch.logical_or(contact, self.last_contacts) 
         self.last_contacts = contact
         
-        
+
         self._update_goals()
         self._post_physics_step_callback()
 
@@ -136,7 +136,8 @@ class Go2Robot(LeggedRobot):
         self.last_dof_vel[:] = self.dof_vel[:]
         self.last_root_vel[:] = self.root_states[:, 7:13]
 
-        # self._draw_debug_vis()
+        self.env_class = (self.root_states[:, 0]/12).int().reshape(-1,1)
+
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
     def check_termination(self):
@@ -185,11 +186,22 @@ class Go2Robot(LeggedRobot):
         self._resample_commands(env_ids)
 
         # reset buffers
+        # self.last_actions[env_ids] = 0.
+        # self.last_dof_vel[env_ids] = 0.
+        # self.feet_air_time[env_ids] = 0.
+        # self.episode_length_buf[env_ids] = 0
+        # self.reset_buf[env_ids] = 1
+        # self.cur_goal_idx[env_ids] = 0
+        # self.reach_goal_timer[env_ids] = 0
         self.last_actions[env_ids] = 0.
         self.last_dof_vel[env_ids] = 0.
+        self.last_torques[env_ids] = 0.
+        self.last_root_vel[:] = 0.
         self.feet_air_time[env_ids] = 0.
-        self.episode_length_buf[env_ids] = 0
         self.reset_buf[env_ids] = 1
+        self.obs_history_buf[env_ids, :, :] = 0.  # reset obs history buffer TODO no 0s
+        self.contact_buf[env_ids, :, :] = 0.
+        self.action_history_buf[env_ids, :, :] = 0.
         self.cur_goal_idx[env_ids] = 0
         self.reach_goal_timer[env_ids] = 0
 
@@ -239,7 +251,7 @@ class Go2Robot(LeggedRobot):
                                     self.delta_yaw[:, None],
                                     self.delta_next_yaw[:, None],
                                     self.commands[:, 0:1] * self.commands_scale,   # 速度   [1,1]
-                                    self.env_class.float(),
+                                    self.env_class.float().unsqueeze(0).reshape(self.num_envs,-1),
                                     (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,  # 每个关节的残差
                                     self.dof_vel * self.obs_scales.dof_vel,    # 每个关节的速度
                                     self.actions,  # policy输出的action
@@ -612,8 +624,16 @@ class Go2Robot(LeggedRobot):
         self.actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_dof_vel = torch.zeros_like(self.dof_vel)
+        self.last_torques = torch.zeros_like(self.torques)
         self.last_root_vel = torch.zeros_like(self.root_states[:, 7:13])
+
         self.reach_goal_timer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        str_rng = self.cfg.domain_rand.motor_strength_range
+        self.motor_strength = (str_rng[1] - str_rng[0]) * torch.rand(2, self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False) + str_rng[0]
+        if self.cfg.env.history_encoding:
+            self.obs_history_buf = torch.zeros(self.num_envs, self.cfg.env.history_len, self.cfg.env.n_proprio, device=self.device, dtype=torch.float)
+        self.action_history_buf = torch.zeros(self.num_envs, self.cfg.domain_rand.action_buf_len, self.num_dofs, device=self.device, dtype=torch.float)
+        self.contact_buf = torch.zeros(self.num_envs, self.cfg.env.contact_buf_len, 4, device=self.device, dtype=torch.float)
 
         self.commands = torch.zeros(self.num_envs, self.cfg.commands.num_commands, dtype=torch.float, device=self.device, requires_grad=False) # x vel, y vel, yaw vel, heading
         self.commands_scale = torch.tensor([self.obs_scales.lin_vel, self.obs_scales.lin_vel, self.obs_scales.ang_vel], device=self.device, requires_grad=False,) # TODO change this
@@ -794,6 +814,9 @@ class Go2Robot(LeggedRobot):
             self.envs.append(env_handle)
             self.actor_handles.append(actor_handle)
 
+        if self.cfg.domain_rand.randomize_friction:
+            self.friction_coeffs_tensor = self.friction_coeffs.to(self.device).to(torch.float).squeeze(-1)
+
         self.feet_indices = torch.zeros(len(feet_names), dtype=torch.long, device=self.device, requires_grad=False)
         for i in range(len(feet_names)):
             self.feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], feet_names[i])
@@ -806,12 +829,27 @@ class Go2Robot(LeggedRobot):
         for i in range(len(termination_contact_names)):
             self.termination_contact_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], termination_contact_names[i])
 
+        hip_names = ["FR_hip_joint", "FL_hip_joint", "RR_hip_joint", "RL_hip_joint"]
+        self.hip_indices = torch.zeros(len(hip_names), dtype=torch.long, device=self.device, requires_grad=False)
+        for i, name in enumerate(hip_names):
+            self.hip_indices[i] = self.dof_names.index(name)
+        thigh_names = ["FR_thigh_joint", "FL_thigh_joint", "RR_thigh_joint", "RL_thigh_joint"]
+        self.thigh_indices = torch.zeros(len(thigh_names), dtype=torch.long, device=self.device, requires_grad=False)
+        for i, name in enumerate(thigh_names):
+            self.thigh_indices[i] = self.dof_names.index(name)
+        calf_names = ["FR_calf_joint", "FL_calf_joint", "RR_calf_joint", "RL_calf_joint"]
+        self.calf_indices = torch.zeros(len(calf_names), dtype=torch.long, device=self.device, requires_grad=False)
+        for i, name in enumerate(calf_names):
+            self.calf_indices[i] = self.dof_names.index(name)
+
     def _get_env_origins(self):
         """ Sets environment origins. On rough terrain the origins are defined by the terrain platforms.
             Otherwise create a grid.
         """
-        self.env_origins[:] = self.terrain_origins[self.terrain_levels, self.terrain_types]
-        self.env_goals = torch.zeros(self.num_envs, self.cfg.terrain.num_goals + self.cfg.env.num_future_goal_obs, 3, device=self.device, requires_grad=False)
+        self.env_class = torch.zeros(self.num_envs, device=self.device, requires_grad=False)
+        tmp_goal=torch.tensor(self.cfg.env.coordinates)
+        self.env_goals = tmp_goal.unsqueeze(0).repeat(self.num_envs, 1, 1).to(self.device)
+
         if self.cfg.terrain.mesh_type in ["heightfield", "trimesh"]:
             self.custom_origins = True
             self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
@@ -828,9 +866,19 @@ class Go2Robot(LeggedRobot):
             self.custom_origins = False
             self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
             #TODO modify the inital position of the robots
-            self.env_origins[:,0:1] = torch_rand_float(24, 70, (self.num_envs,1), device=self.device)
+            self.env_origins[:,0:1] = torch_rand_float(2, 5, (self.num_envs,1), device=self.device)
             self.env_origins[:,1:2] = torch_rand_float(4, 8, (self.num_envs,1), device=self.device)
+            # put robots at the origins defined by the terrain
 
+
+            self.cur_goal_idx = torch.zeros(self.num_envs, device=self.device, requires_grad=False, dtype=torch.long)
+
+            tensor = torch.randn(5, 3)  # 生成一个 3xN 的随机张量，3 表示每列是一个三维向量
+
+            self.env_goals = tensor.unsqueeze(0).expand(self.num_envs, -1, -1).to(self.device)
+
+            self.cur_goals = self._gather_cur_goals()
+            self.next_goals = self._gather_cur_goals(future=1)
 
             # center_x=torch.tensor(18, device=self.device)
             # center_y=torch.tensor(6, device=self.device)
@@ -882,10 +930,10 @@ class Go2Robot(LeggedRobot):
         # draw height lines
         if not self.terrain.cfg.measure_heights:
             return
-        self._draw_goals()
-        self._draw_feet()
         self.gym.clear_lines(self.viewer)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
+        self._draw_goals()
+        self._draw_feet()
         sphere_geom = gymutil.WireframeSphereGeometry(0.02, 4, 4, None, color=(1, 1, 0))
         for i in range(self.num_envs):
             base_pos = (self.root_states[i, :3]).cpu().numpy()
@@ -902,15 +950,32 @@ class Go2Robot(LeggedRobot):
 
 
     def _draw_goals(self):
+        self.lookat_id=self.cfg.env.lookat_id
         sphere_geom = gymutil.WireframeSphereGeometry(0.1, 32, 32, None, color=(1, 0, 0))
         sphere_geom_cur = gymutil.WireframeSphereGeometry(0.1, 32, 32, None, color=(0, 0, 1))
         sphere_geom_reached = gymutil.WireframeSphereGeometry(self.cfg.env.next_goal_threshold, 32, 32, None, color=(0, 1, 0))
-        goals = self.terrain_goals[self.terrain_levels[self.lookat_id], self.terrain_types[self.lookat_id]].cpu().numpy()
+        goals = self.env_goals[self.lookat_id,:,:].cpu().numpy()
+        print('self.env_goals',self.env_goals)
         for i, goal in enumerate(goals):
-            goal_xy = goal[:2] + self.terrain.cfg.border_size
-            pts = (goal_xy/self.terrain.cfg.horizontal_scale).astype(int)
-            goal_z = self.height_samples[pts[0], pts[1]].cpu().item() * self.terrain.cfg.vertical_scale
-            pose = gymapi.Transform(gymapi.Vec3(goal[0], goal[1], goal_z), r=None)
+            # goal_xy = goal[:,:2]
+            # print('----------------')
+            # print('goal',goal)
+            # print('i:',i)
+            # print('goal_xy',goal_xy)
+            # print('self.terrain.cfg.horizontal_scale',self.terrain.cfg.horizontal_scale)
+
+            
+
+            # pts = (goal_xy/self.terrain.cfg.horizontal_scale).astype(int)
+            # print('pts',pts)
+            # print('pt[0]',pts[0])
+            # print('pts[1]',pts[1])
+
+
+            # print('----------------')
+
+            pose = gymapi.Transform(gymapi.Vec3(goal[0], goal[1], goal[2]), r=None)
+
             if i == self.cur_goal_idx[self.lookat_id].cpu().item():
                 gymutil.draw_lines(sphere_geom_cur, self.gym, self.viewer, self.envs[self.lookat_id], pose)
                 if self.reached_goal_ids[self.lookat_id]:
@@ -918,23 +983,22 @@ class Go2Robot(LeggedRobot):
             else:
                 gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[self.lookat_id], pose)
         
-        if not self.cfg.depth.use_camera:
-            sphere_geom_arrow = gymutil.WireframeSphereGeometry(0.02, 16, 16, None, color=(1, 0.35, 0.25))
-            pose_robot = self.root_states[self.lookat_id, :3].cpu().numpy()
-            for i in range(5):
-                norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)
-                target_vec_norm = self.target_pos_rel / (norm + 1e-5)
-                pose_arrow = pose_robot[:2] + 0.1*(i+3) * target_vec_norm[self.lookat_id, :2].cpu().numpy()
-                pose = gymapi.Transform(gymapi.Vec3(pose_arrow[0], pose_arrow[1], pose_robot[2]), r=None)
-                gymutil.draw_lines(sphere_geom_arrow, self.gym, self.viewer, self.envs[self.lookat_id], pose)
-            
-            sphere_geom_arrow = gymutil.WireframeSphereGeometry(0.02, 16, 16, None, color=(0, 1, 0.5))
-            for i in range(5):
-                norm = torch.norm(self.next_target_pos_rel, dim=-1, keepdim=True)
-                target_vec_norm = self.next_target_pos_rel / (norm + 1e-5)
-                pose_arrow = pose_robot[:2] + 0.2*(i+3) * target_vec_norm[self.lookat_id, :2].cpu().numpy()
-                pose = gymapi.Transform(gymapi.Vec3(pose_arrow[0], pose_arrow[1], pose_robot[2]), r=None)
-                gymutil.draw_lines(sphere_geom_arrow, self.gym, self.viewer, self.envs[self.lookat_id], pose)
+        sphere_geom_arrow = gymutil.WireframeSphereGeometry(0.02, 16, 16, None, color=(1, 0.35, 0.25))
+        pose_robot = self.root_states[self.lookat_id, :3].cpu().numpy()
+        for i in range(5):
+            norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)
+            target_vec_norm = self.target_pos_rel / (norm + 1e-5)
+            pose_arrow = pose_robot[:2] + 0.1*(i+3) * target_vec_norm[self.lookat_id, :2].cpu().numpy()
+            pose = gymapi.Transform(gymapi.Vec3(pose_arrow[0], pose_arrow[1], pose_robot[2]), r=None)
+            gymutil.draw_lines(sphere_geom_arrow, self.gym, self.viewer, self.envs[self.lookat_id], pose)
+        
+        sphere_geom_arrow = gymutil.WireframeSphereGeometry(0.02, 16, 16, None, color=(0, 1, 0.5))
+        for i in range(5):
+            norm = torch.norm(self.next_target_pos_rel, dim=-1, keepdim=True)
+            target_vec_norm = self.next_target_pos_rel / (norm + 1e-5)
+            pose_arrow = pose_robot[:2] + 0.2*(i+3) * target_vec_norm[self.lookat_id, :2].cpu().numpy()
+            pose = gymapi.Transform(gymapi.Vec3(pose_arrow[0], pose_arrow[1], pose_robot[2]), r=None)
+            gymutil.draw_lines(sphere_geom_arrow, self.gym, self.viewer, self.envs[self.lookat_id], pose)
         
     def _draw_feet(self):
         if hasattr(self, 'feet_at_edge'):
@@ -1090,6 +1154,12 @@ class Go2Robot(LeggedRobot):
         ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
         return torch.exp(-ang_vel_error/self.cfg.rewards.tracking_sigma)
 
+    def _reward_feet_stumble(self):
+        # Penalize feet hitting vertical surfaces
+        rew = torch.any(torch.norm(self.contact_forces[:, self.feet_indices, :2], dim=2) >\
+             4 *torch.abs(self.contact_forces[:, self.feet_indices, 2]), dim=1)
+        return rew.float()
+
     def _reward_feet_air_time(self):
         # Reward long steps
         # Need to filter the contacts because the contact reporting of PhysX is unreliable on meshes
@@ -1167,15 +1237,15 @@ class Go2Robot(LeggedRobot):
         rew = torch.exp(-torch.abs(self.target_yaw - self.yaw))
         return rew
 
-    def _reward_feet_edge(self):
-        feet_pos_xy = ((self.rigid_body_states[:, self.feet_indices, :2] + self.terrain.cfg.border_size) / self.cfg.terrain.horizontal_scale).round().long()  # (num_envs, 4, 2)
-        feet_pos_xy[..., 0] = torch.clip(feet_pos_xy[..., 0], 0, self.x_edge_mask.shape[0]-1)
-        feet_pos_xy[..., 1] = torch.clip(feet_pos_xy[..., 1], 0, self.x_edge_mask.shape[1]-1)
-        feet_at_edge = self.x_edge_mask[feet_pos_xy[..., 0], feet_pos_xy[..., 1]]
+    # def _reward_feet_edge(self):
+    #     feet_pos_xy = ((self.rigid_body_states[:, self.feet_indices, :2] + self.terrain.cfg.border_size) / self.cfg.terrain.horizontal_scale).round().long()  # (num_envs, 4, 2)
+    #     feet_pos_xy[..., 0] = torch.clip(feet_pos_xy[..., 0], 0, self.x_edge_mask.shape[0]-1)
+    #     feet_pos_xy[..., 1] = torch.clip(feet_pos_xy[..., 1], 0, self.x_edge_mask.shape[1]-1)
+    #     feet_at_edge = self.x_edge_mask[feet_pos_xy[..., 0], feet_pos_xy[..., 1]]
     
-        self.feet_at_edge = self.contact_filt & feet_at_edge
-        rew = (self.terrain_levels > 3) * torch.sum(self.feet_at_edge, dim=-1)
-        return rew
+    #     self.feet_at_edge = self.contact_filt & feet_at_edge
+    #     rew = (self.terrain_levels > 3) * torch.sum(self.feet_at_edge, dim=-1)
+    #     return rew
     
     def _reward_feet_height(self):
         # penalize feet too low
@@ -1187,3 +1257,4 @@ class Go2Robot(LeggedRobot):
 
 
     #     return torch.sum((self.foot_pos[:, :, 2] - self.measured_heights).clip(min=0.), dim=1)
+
