@@ -10,7 +10,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         num_actions = 12
         env_spacing = 3.  # not used with heightfields/trimeshes 
         send_timeouts = True # send time out information to the algorithm
-        episode_length_s = 200 # episode length in seconds
+        episode_length_s = 20 # episode length in seconds
 
 
         history_encoding = True
@@ -32,14 +32,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         next_goal_threshold = 0.2
         reach_goal_delay = 0.1
         num_future_goal_obs = 2
-        coordinates = [
-            [6.0, 7.0, 3.0],
-            [6.0, 7.0, 0.0],  # 第一列的三维坐标
-            [7.0, 6.0, 0.0],  # 第二列的三维坐标
-            [8.0, 7.0, 0.0],  # 第三列的三维坐标
-            [9.0, 6.0, 0.0],  # 第四列的三维坐标
-            [9.0, 7.0, 0.0],  # 第四列的三维坐标
-        ]
+
         lookat_id=0
 
 
@@ -67,8 +60,75 @@ class Go2RoughCfg( LeggedRobotCfg ):
         terrain_proportions = [0,1, 0, 0, 0]
         # trimesh only:
         slope_treshold = 0.75 # slopes above this threshold will be corrected to vertical surfaces
-        #TODO modify the number of goals
-        num_goals = 8
+        #TODO modify the goals
+        
+        coordinates = [
+            # # plane
+            # [10.0, 6.0, 0.0],
+            # # pyramid
+            # [13.0, 6.0, -0.2],
+            # [15.0, 6.05, -0.5],
+            # [17.5, 6.1, -1.0],
+            # [20.0, 6.2, -0.75], 
+            # [22.0, 6.3, -0.5], 
+            # # forest
+            # [25.0, 6.5, 0.3], 
+            # [27.5, 6.7, 0.3],
+            # [30.0, 6.9, 0.3], 
+            # [33.0, 7.1, 0.3], 
+            # # matrix
+            # [36.5, 7.4, 0.0], 
+            # [38.5, 8.0, 0.0], 
+            # [40.0, 9.0, 0.5], 
+            # [42.0, 9.5, 0.7], 
+            # [43.0, 10.0, 0.0], 
+            # [47.0, 10.0, 0.2], 
+            # [48.0, 10.0, 0.2], 
+            # # wave
+            # [49.0, 9.0, 0.5], 
+            # [50.0, 9.0, 0.0], 
+            # [52.0, 8.0, 0.5], 
+            # [53.0, 7.5, 1.0], 
+            # [57.0, 6.0, 1.0], 
+            # # step up
+            # [60.0, 6.0, 0.7], 
+            # [61.0, 6.0, 1.0], 
+            # [63.0, 6.0, 1.5], 
+            # [65.0, 6.0, 2.5], 
+            # [67.0, 6.0, 3.0], 
+            # [69.0, 6.0, 3.5], 
+            # [71.0, 6.0, 4.0], 
+            # [72.0, 6.0, 4.5], 
+            # # step down
+            # [73.0, 6.0, 4.5], 
+            # [74.0, 5.8, 4.0], 
+            # [76.0, 5.5, 3.0], 
+            # [78.0, 5.4, 2.5], 
+            # [80.0, 5.35, 2.0], 
+            # [82.0, 5.35, 1.5], 
+            # [83.0, 5.35, 1.0], 
+            # # quincuncial piles
+            # [84.3, 1.56, 0.1], 
+            [85.7, 1.56, 0.1], 
+            [86.8, 1.56, 0.1]
+            # [88.1, 1.56, 0.1], 
+            # [89.3, 1.56, 0.1], 
+            # [90.6, 1.56, 0.1], 
+            # [91.8, 1.56, 0.1], 
+            # [93.1, 1.56, 0.1], 
+            # [94.3, 1.56, 0.1], 
+            # [95.4, 1.56, 0.1], 
+            # # final
+            # [97.9, 5.35, 0.1], 
+            # [98.4, 5.35, 0.1], 
+            # [100.0, 5.35, 0.1], 
+            # [103.0, 5.35, 0.1], 
+            # [105.0, 5.35, 0.1], 
+            # [107.9, 5.35, 0.1], 
+
+        ]
+        num_goals = coordinates.__len__()
+        
 
     class init_state( LeggedRobotCfg.init_state ):
         pos = [0.0, 0.0, 0.42] # x,y,z [m]
@@ -95,7 +155,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         resampling_time = 10. # time before command are changed[s]
         heading_command = True # if true: compute ang vel command from heading error
         class ranges:
-            lin_vel_x = [0.8, 0.8] # min max [m/s]
+            lin_vel_x = [0.35, 1.35] # min max [m/s]
             lin_vel_y = [0., 0.]   # min max [m/s]
             ang_vel_yaw = [0., 0.]    # min max [rad/s]
             heading = [0, 0]
@@ -149,8 +209,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
             feet_air_time = 0.0
             collision = -0.0
             feet_stumble = -0.0
-            action_rate = -0.0
-            stand_still = -0.0
+            stand_still = -0.001
             dof_pos_limits = -0.0
             stagnation=-0.0
             limbo = -0.0
@@ -161,18 +220,20 @@ class Go2RoughCfg( LeggedRobotCfg ):
             # tracking rewards
             tracking_goal_vel = 1.5
             tracking_yaw = 0.5
+            reach_all_goal = 50.0
             # regularization rewards
             lin_vel_z = -1.0
             ang_vel_xy = -0.05
             orientation = -1.
             dof_acc = -2.5e-7
             collision = -10.
-            action_rate = -0.1
+            action_rate = -0.0015
             delta_torques = -1.0e-7
             torques = -0.00001
             hip_pos = -0.5
             dof_error = -0.04
             feet_stumble = -1
+            jump_up = 10.0
             # feet_edge = -1
 
             # termination = -0.0
@@ -217,7 +278,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         soft_dof_pos_limit = 0.9 # percentage of urdf limits, values above this limit are penalized
         soft_dof_vel_limit = 1.
         soft_torque_limit = 1.
-        base_height_target = 0.3
+        base_height_target = 0.25
         max_contact_force = 100. # forces above this value are penalized
         goal_position_x = 46 #TODO
 
