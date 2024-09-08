@@ -31,7 +31,7 @@
 import numpy as np
 from numpy.random import choice
 from scipy import interpolate
-
+import torch
 from isaacgym import terrain_utils
 from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg
 
@@ -73,13 +73,16 @@ class Terrain:
 
         self.height_field_raw = np.zeros((self.tot_rows , self.tot_cols), dtype=np.int16)
 
-        
+
         self.heightsamples = self.height_field_raw
         if self.type in ['trimesh','competition']:
             self.vertices, self.triangles = terrain_utils.convert_heightfield_to_trimesh(   self.height_field_raw,
                                                                                             self.cfg.horizontal_scale,
                                                                                             self.cfg.vertical_scale,
                                                                                             self.cfg.slope_treshold)
+    
+
+
     
     def randomized_terrain(self):
         for k in range(self.cfg.num_sub_terrains):

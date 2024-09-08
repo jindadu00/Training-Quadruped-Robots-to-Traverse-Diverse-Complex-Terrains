@@ -136,7 +136,7 @@ class Go2Robot(LeggedRobot):
         self.last_dof_vel[:] = self.dof_vel[:]
         self.last_root_vel[:] = self.root_states[:, 7:13]
 
-        self.env_class = ((self.root_states[:, 0]+1)/12).int().reshape(-1,1)
+        self.env_class = ((self.root_states[:, 0]+0.5)/12).int().reshape(-1,1)
 
         # self._draw_debug_vis()
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
@@ -297,6 +297,31 @@ class Go2Robot(LeggedRobot):
         # add noise if needed
         if self.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+
+    
+    def compute_edge_mask(self, height_field, threshold):
+            """计算地形边缘的布尔掩码"""
+            # 计算高度差
+            diff_x = np.abs(height_field[:, 1:] - height_field[:, :-1])  # x方向上的差异
+            diff_y = np.abs(height_field[1:, :] - height_field[:-1, :])  # y方向上的差异
+
+
+            # print('diff_x',sum(diff_x))
+            # print('diff_y',sum(diff_y))
+
+            # 创建与 height_field 大小相同的布尔矩阵，初始化为 False
+            edge_mask = np.zeros_like(height_field, dtype=bool)
+
+            # 标记 x 方向的边缘
+            edge_mask[:, 1:] |= (diff_x > threshold)
+            edge_mask[:, :-1] |= (diff_x > threshold)
+
+            # 标记 y 方向的边缘
+            edge_mask[1:, :] |= (diff_y > threshold)
+            edge_mask[:-1, :] |= (diff_y > threshold)
+
+            return torch.tensor(edge_mask)
+    
     def create_competition_map(self):
         num_terains = 9
         terrain_width = self.cfg.terrain.terrain_width
@@ -321,7 +346,11 @@ class Go2Robot(LeggedRobot):
         self.terrain.heightsamples[7*num_rows:8*num_rows,:] = stepping_stones_terrain(new_sub_terrain(), stone_size=1.,
                                                                         stone_distance=0.25, max_height=0.2, platform_size=0.).height_field_raw
 
+
+        # 计算 edge_mask
+        self.edge_mask = self.compute_edge_mask(self.terrain.heightsamples, 100).to(self.device)
         
+    
         self.terrain.vertices, self.terrain.triangles = convert_heightfield_to_trimesh(self.terrain.heightsamples, horizontal_scale=horizontal_scale, vertical_scale=vertical_scale, slope_threshold=1.5)
         tm_params = gymapi.TriangleMeshParams()
         tm_params.nb_vertices = self.terrain.vertices.shape[0]
@@ -343,6 +372,13 @@ class Go2Robot(LeggedRobot):
 
 
         self.height_samples = torch.tensor(self.height_field_raw).view(self.tot_rows, self.terrain.tot_cols).to(self.device)
+
+        # 通过 unsqueeze 在第一个维度上增加一个维度，使得形状变为 [1, 432, 48]
+        self.ground_height = self.height_samples.unsqueeze(0)
+
+        # 使用 repeat 在第一个维度上复制 n 次，得到的形状为 [n, 432, 48]
+        self.ground_height = self.ground_height.repeat(self.num_envs, 1, 1)
+
 
     def create_sim(self):
         """ Creates simulation, terrain and evironments
@@ -805,6 +841,7 @@ class Go2Robot(LeggedRobot):
 
         # save body names from the asset
         body_names = self.gym.get_asset_rigid_body_names(robot_asset)
+        print('----------------body_names:',body_names)
         self.dof_names = self.gym.get_asset_dof_names(robot_asset)
         self.num_bodies = len(body_names)
         self.num_dofs = len(self.dof_names)
@@ -844,12 +881,20 @@ class Go2Robot(LeggedRobot):
             self.envs.append(env_handle)
             self.actor_handles.append(actor_handle)
 
+
         if self.cfg.domain_rand.randomize_friction:
             self.friction_coeffs_tensor = self.friction_coeffs.to(self.device).to(torch.float).squeeze(-1)
 
         self.feet_indices = torch.zeros(len(feet_names), dtype=torch.long, device=self.device, requires_grad=False)
+        self.front_feet_indices = torch.zeros(int(len(feet_names)/2), dtype=torch.long, device=self.device, requires_grad=False)
+        # print(feet_names)
         for i in range(len(feet_names)):
             self.feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], feet_names[i])
+        
+
+        for i in range(int(len(feet_names)/2)):
+            self.front_feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], feet_names[i])
+
 
         self.penalised_contact_indices = torch.zeros(len(penalized_contact_names), dtype=torch.long, device=self.device, requires_grad=False)
         for i in range(len(penalized_contact_names)):
@@ -905,10 +950,13 @@ class Go2Robot(LeggedRobot):
             self.custom_origins = False
             self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
             #TODO modify the inital position of the robots
-            self.env_origins[:,0:1] = torch_rand_float(84.1, 84.4, (self.num_envs,1), device=self.device)
-            self.env_origins[:,1:2] = torch_rand_float(1.57, 1.55, (self.num_envs,1), device=self.device)
+            # self.env_origins[:,0:1] = torch_rand_float(90.5, 90.7, (self.num_envs,1), device=self.device)
+            # self.env_origins[:,1:2] = torch_rand_float(1.66, 1.62, (self.num_envs,1), device=self.device)
+            self.env_origins[:,0:1] = torch_rand_float(70.0, 72.0, (self.num_envs,1), device=self.device)
+            self.env_origins[:,1:2] = torch_rand_float(3.0, 5.0, (self.num_envs,1), device=self.device)
             # put robots at the origins defined by the terrain
 
+# [72.0, 7.9, 4.0], 
 
             self.cur_goal_idx = torch.zeros(self.num_envs, device=self.device, requires_grad=False, dtype=torch.long)
 
@@ -938,6 +986,10 @@ class Go2Robot(LeggedRobot):
 
             indices = torch.where((self.env_origins[:, 0:1] >= 72) & (self.env_origins[:, 0:1] <= 84))[0]
             self.env_origins[indices, 2:3] = 4.1 - 0.33 * (self.env_origins[indices, 0:1] - 72)
+
+            indices = torch.where((self.env_origins[:, 0:1] >= 84) & (self.env_origins[:, 0:1] <= 100.4))[0]
+            self.env_origins[indices, 2:3] = -0.12
+
 
         else:
             self.custom_origins = False
@@ -973,7 +1025,10 @@ class Go2Robot(LeggedRobot):
         self.gym.clear_lines(self.viewer)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
         self._draw_goals()
-        self._draw_feet()
+        # self._draw_feet()
+
+        # 可视化地形边缘
+        # self._draw_terrain_edges()    
         sphere_geom = gymutil.WireframeSphereGeometry(0.02, 4, 4, None, color=(1, 1, 0))
         for i in range(self.num_envs):
             base_pos = (self.root_states[i, :3]).cpu().numpy()
@@ -988,6 +1043,27 @@ class Go2Robot(LeggedRobot):
                 sphere_pose = gymapi.Transform(gymapi.Vec3(x, y, z), r=None)
                 gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], sphere_pose) 
 
+    def _draw_terrain_edges(self):
+        """Draws spheres at the positions of terrain edges."""
+
+        edge_geom = gymutil.WireframeSphereGeometry(0.02, 4, 4, None, color=(1, 0, 0))
+        
+        # 获取地形中所有标记为边缘的点
+        edge_positions = torch.nonzero(self.edge_mask, as_tuple=False)
+        print('edge_positions',edge_positions)
+        for pos in edge_positions:
+            x, y = pos.cpu().numpy()
+            z = self.height_samples[x, y].cpu().numpy()*self.terrain.cfg.vertical_scale
+            
+            # 将x, y从索引转换为仿真中的实际位置
+            world_x = x * self.terrain.cfg.horizontal_scale
+            world_y = y * self.terrain.cfg.horizontal_scale
+            
+            pose = gymapi.Transform(gymapi.Vec3(world_x, world_y, z), r=None)
+            
+            # 在所有环境中绘制边缘点
+            for i in range(self.num_envs):
+                gymutil.draw_lines(edge_geom, self.gym, self.viewer, self.envs[i], pose)
 
     def _draw_goals(self):
         # print('---------------')
@@ -1050,9 +1126,9 @@ class Go2Robot(LeggedRobot):
             for i in range(4):
                 pose = gymapi.Transform(gymapi.Vec3(feet_pos[self.lookat_id, i, 0], feet_pos[self.lookat_id, i, 1], feet_pos[self.lookat_id, i, 2]), r=None)
                 if self.feet_at_edge[self.lookat_id, i]:
-                    gymutil.draw_lines(edge_geom, self.gym, self.viewer, self.envs[i], pose)
+                    gymutil.draw_lines(edge_geom, self.gym, self.viewer, self.envs[0], pose)
                 else:
-                    gymutil.draw_lines(non_edge_geom, self.gym, self.viewer, self.envs[i], pose)
+                    gymutil.draw_lines(non_edge_geom, self.gym, self.viewer, self.envs[0], pose)
 
 
     def _init_height_points(self):
@@ -1174,6 +1250,8 @@ class Go2Robot(LeggedRobot):
         # Penalize dof positions too close to the limit
         out_of_limits = -(self.dof_pos - self.dof_pos_limits[:, 0]).clip(max=0.) # lower limit
         out_of_limits += (self.dof_pos - self.dof_pos_limits[:, 1]).clip(min=0.)
+
+        # print(torch.sum(out_of_limits, dim=1))
         return torch.sum(out_of_limits, dim=1)
 
     def _reward_dof_vel_limits(self):
@@ -1213,11 +1291,9 @@ class Go2Robot(LeggedRobot):
         rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.1 #no reward for zero command
         self.feet_air_time *= ~contact_filt
         return rew_airTime
-    
-    def _reward_stumble(self):
-        # Penalize feet hitting vertical surfaces
-        return torch.any(torch.norm(self.contact_forces[:, self.feet_indices, :2], dim=2) >\
-             5 *torch.abs(self.contact_forces[:, self.feet_indices, 2]), dim=1)
+
+
+   
         
     def _reward_stand_still(self):
         # Penalize motion at zero commands
@@ -1275,11 +1351,100 @@ class Go2Robot(LeggedRobot):
         return rew
 
     def _reward_jump_up(self):
-        rew = self.base_lin_vel[:, 2] > 1.0
-        meihuazhuang= self.root_states[:, 0] > 80.0
+        jump = self.base_lin_vel[:, 2] > 0.7
+        meihuazhuang= self.root_states[:, 0] > 83.7
         # print('base_lin_vel[:, 2]:',self.base_lin_vel[:, 2])
         # print('jump:',rew & meihuazhuang)
-        return rew & meihuazhuang
+        return jump & meihuazhuang
+
+    def _reward_jump_lift_front_feet(self):
+
+        # reward feet is forced horizontally(stuck) and feet are up
+        jump = self.base_lin_vel[:, 2] > 0.7
+        front_foot_vel_z=self.rigid_body_states[:, self.front_feet_indices, 9]
+        front_foot_vel_z_positive = torch.clamp(front_foot_vel_z, min=0.0, max=1.0)
+
+        # print('front_foot_vel_z',front_foot_vel_z)
+        meihuazhuang= self.root_states[:, 0] > 83.7
+        # print('stuck',stuck)
+        # print('foot_vel_z<=0',foot_vel_z<=0)
+        # print('stuck * foot_vel_z<=0',stuck * (foot_vel_z<=0))
+        # torch.sum(stuck * (foot_vel_z<=0))
+        # print('sum(front_foot_vel_z>0.1,dim=1)',torch.sum(front_foot_vel_z_positive,dim=1))
+        # print('meihuazhuang',meihuazhuang)
+        # print('jump',jump)
+        # print('jump&meihuazhuang',jump&meihuazhuang)
+        return (jump&meihuazhuang) * torch.sum(front_foot_vel_z_positive,dim=1)
+
+    def _reward_foot_above_knee(self):
+        """
+        Reward the robot for keeping the foot height above the knee height during jumping.
+        """
+        jump = self.base_lin_vel[:, 2] > 0.7
+        meihuazhuang= self.root_states[:, 0] > 83.7
+
+        # 获取膝盖和脚的 z 轴高度（垂直高度）
+        foot_height = self.rigid_body_states[:, self.feet_indices, 2]  # 获取每只脚的高度
+        knee_height = self.rigid_body_states[:, self.calf_indices, 2]  # 获取对应膝盖的高度
+
+        # 计算脚高于膝盖的高度差
+        delta_height = foot_height - knee_height
+
+        # 设定奖励，当脚高于膝盖时给予奖励，否则不给奖励或给予惩罚
+        reward = torch.where(delta_height > 0, delta_height, torch.tensor(0.0, device=self.device))
+
+        # 汇总所有脚的奖励
+        return (jump&meihuazhuang) *torch.sum(reward, dim=1)
+
+    def _reward_jump_pitch(self):
+        # 检查是否在跳跃状态
+        jump = self.base_lin_vel[:, 2] > 0.7
+        meihuazhuang= self.root_states[:, 0] > 83.7
+        
+        # 获取俯仰角
+        _, pitch, _ = euler_from_quaternion(self.base_quat)
+        
+        # 设置目标俯仰角为10度（微微向上抬头）
+        pitch_target = torch.tensor(10.0 * np.pi / 180.0, device=self.device)  # 10度转换为弧度
+        
+        # 计算俯仰角误差
+        pitch_error = torch.abs(pitch - pitch_target)
+        
+        # 给予基于误差的奖励，误差越小，奖励越高
+        reward = torch.exp(-pitch_error * 2.0)  # 这里的2.0是权重，可调节奖励函数的敏感度
+        
+        # 只在跳跃时生效
+        reward *= (jump&meihuazhuang)
+        
+        return reward
+
+    def _reward_air_foward(self):
+        # 检查是否在跳跃状态
+        jump_time = self.base_lin_vel[:, 2] > 0.7
+
+        meihuazhuang= self.root_states[:, 0] > 83.7
+
+        # 计算目标方向的单位向量
+        norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)
+        target_vec_norm = self.target_pos_rel / (norm + 1e-5)
+
+        # 获取当前的速度并规范化
+        cur_vel = self.root_states[:, 7:9]
+        norm = torch.norm(cur_vel, dim=-1, keepdim=True)
+        cur_vel_norm = cur_vel / norm
+
+        # 计算当前速度在目标方向上的投影（奖励的基础值）
+        rew = torch.sum(cur_vel_norm * target_vec_norm, dim=-1)
+
+        # 应用跳跃时间条件
+        rew *= jump_time
+
+        # 将大于0.5的部分乘以3
+        rew[rew > 0.7] *= 3
+
+        # print('rew', rew)
+        return (rew > 0) & meihuazhuang
+
 
 
     def _reward_tracking_yaw(self):
@@ -1288,7 +1453,7 @@ class Go2Robot(LeggedRobot):
 
     # def _reward_feet_edge(self):
     #     feet_pos_xy = ((self.rigid_body_states[:, self.feet_indices, :2] + self.terrain.cfg.border_size) / self.cfg.terrain.horizontal_scale).round().long()  # (num_envs, 4, 2)
-    #     feet_pos_xy[..., 0] = torch.clip(feet_pos_xy[..., 0], 0, self.x_edge_mask.shape[0]-1)
+    #     feet_pos_xy[..., 0] = torch.clip(feet_pos_xy[..., 0], 0, self.x_edge_mask.shape[0]-1).
     #     feet_pos_xy[..., 1] = torch.clip(feet_pos_xy[..., 1], 0, self.x_edge_mask.shape[1]-1)
     #     feet_at_edge = self.x_edge_mask[feet_pos_xy[..., 0], feet_pos_xy[..., 1]]
     
@@ -1302,7 +1467,42 @@ class Go2Robot(LeggedRobot):
     def _reward_feet_height(self):
         # penalize feet too low
 
-       self.foot_handles = self.gym.find_asset_rigid_body_index(self.robot_asset, "hip_names")
+        # self.foot_handles = self.gym.find_asset_rigid_body_index(self.robot_asset, "hip_names")
+        # print('foot_pos',self.foot_pos[:,:,:])   #  (env狗的编号，每只狗的脚的编号，x,y,z)
+
+        # 提取x, y坐标
+        self.foot_pos=self.rigid_body_states[:, self.feet_indices, :3]
+
+        foot_pos_xy = self.foot_pos[:, :, :2]  # (num_envs, 4, 2)
+        
+        # 缩放坐标，转换为索引
+        indices = (foot_pos_xy / 0.25).long()  # (num_envs, 4, 2)
+
+        # 限制索引在有效范围内
+        indices[:, :, 0] = indices[:, :, 0].clamp(0, self.height_samples.shape[0] - 1)  # 限制x索引
+        indices[:, :, 1] = indices[:, :, 1].clamp(0, self.height_samples.shape[1] - 1)  # 限制y索引
+
+        
+        # print('indices[:, :, 0]',indices[:, :, 0])
+        # print('indices[:, :, 1]',indices[:, :, 1])
+        # 获取每只脚的地面高度
+        feet_ground_heights = self.height_samples[indices[:, :, 0], indices[:, :, 1]] * self.cfg.terrain.vertical_scale # (num_envs, 4)
+        # feet_ground_heights2 = self.height_samples[40*4:44*4, 0:48] *self.cfg.terrain.vertical_scale # (num_envs, 4)
+    
+        # print('height_samples',feet_ground_heights)
+        # self.ground_height_tmp = self.ground_height.unsqueeze(1)
+        # self.height_samples
+        # self.ground_height_tmp = self.ground_height_tmp.repeat(1, 4, 1, 1)
+        # px=(self.foot_pos[:,:,0]/0.25).int()
+        # py=(self.foot_pos[:,:,1]/0.25).int()
+         
+        # ground_height_at_feet = self.ground_height_tmp.gather(2, px.unsqueeze(-1).expand(-1, -1, -1, py.size(-1))) \
+        #                                          .gather(3, py.unsqueeze(-2).expand(-1, -1, px.size(-1), -1)).squeeze(-1).squeeze(-1)
+        print('feet_ground_heights',feet_ground_heights) 
+        print('foot_pos',self.foot_pos[:,:,2]) 
+        print('feet_ground_heights>foot_pos',feet_ground_heights>self.foot_pos[:,:,2]+0.05) 
+        rew=torch.sum(feet_ground_heights>self.foot_pos[:,:,2]+0.05,dim=1)    #地面比脚高的个数
+        return rew
     #     #self.foot_pos
     #     # heights
     #     #return torch.sum((self.root_states[:, 2].unsqueeze(1) - self.measured_heights).clip(min=0.), dim=1)
@@ -1310,3 +1510,53 @@ class Go2Robot(LeggedRobot):
 
     #     return torch.sum((self.foot_pos[:, :, 2] - self.measured_heights).clip(min=0.), dim=1)
 
+    def _reward_feet_edge(self):
+            foot_pos_xy=self.rigid_body_states[:, self.feet_indices, :2]
+            
+            # 缩放坐标，转换为索引
+            indices = (foot_pos_xy / 0.25).long()  # (num_envs, 4, 2)
+
+            # 限制索引在有效范围内
+            indices[:, :, 0] = indices[:, :, 0].clamp(0, self.height_samples.shape[0] - 1)  # 限制x索引
+            indices[:, :, 1] = indices[:, :, 1].clamp(0, self.height_samples.shape[1] - 1)  # 限制y索引
+
+            feet_at_edge = self.edge_mask[indices[:, :, 0], indices[:, :, 1]]
+        
+            self.feet_at_edge = self.contact_filt & feet_at_edge
+            rew = (self.root_states[:,0] > 83.5) * torch.sum(self.feet_at_edge, dim=-1)
+            # print(rew)
+            return rew
+
+
+    def _reward_edge_feet_up(self):
+        # reward feet which is at edge and is lifted(reward is recommend to be not more than 'feet_edge')
+        foot_pos_xy=self.rigid_body_states[:, self.feet_indices, :2]
+        
+        # 缩放坐标，转换为索引
+        indices = (foot_pos_xy / 0.25).long()  # (num_envs, 4, 2)
+
+        # 限制索引在有效范围内
+        indices[:, :, 0] = indices[:, :, 0].clamp(0, self.height_samples.shape[0] - 1)  # 限制x索引
+        indices[:, :, 1] = indices[:, :, 1].clamp(0, self.height_samples.shape[1] - 1)  # 限制y索引
+
+        feet_at_edge = self.edge_mask[indices[:, :, 0], indices[:, :, 1]]
+    
+        self.feet_at_edge = self.contact_filt & feet_at_edge
+
+        edge = self.feet_at_edge
+
+
+        foot_vel_z=self.rigid_body_states[:, self.feet_indices, 9]
+        # print('stuck',stuck)
+        # print('foot_vel_z<=0',foot_vel_z<=0)
+        # print('stuck * foot_vel_z<=0',stuck * (foot_vel_z<=0))
+        # print('torch.sum((foot_vel_z<=0))',torch.sum((foot_vel_z<=0)))
+        # print('edge',edge)
+        # print('(foot_vel_z<=0)',(foot_vel_z<=0))
+        # print('torch.sum(edge * torch.sum((foot_vel_z<=0),dim=1),dim=1)',torch.sum(edge * (foot_vel_z<=0),dim=1))
+        return (self.root_states[:,0] > 83.5) *torch.sum(edge * (foot_vel_z > 0.1),dim=1)
+    
+    def _reward_stumble(self):
+        # Penalize feet hitting vertical surfaces
+        return torch.any(torch.norm(self.contact_forces[:, self.feet_indices, :2], dim=2) >\
+             5 *torch.abs(self.contact_forces[:, self.feet_indices, 2]), dim=1)
