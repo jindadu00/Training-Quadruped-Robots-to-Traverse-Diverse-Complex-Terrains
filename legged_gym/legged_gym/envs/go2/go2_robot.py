@@ -152,6 +152,11 @@ class Go2Robot(LeggedRobot):
         roll_cutoff = torch.abs(self.roll) > 1.5
         pitch_cutoff = torch.abs(self.pitch) > 1.5
 
+
+        #TODO temporary termination
+        foot_height = self.rigid_body_states[:, self.feet_indices[:2], 2]
+        foot_low_cutoff = torch.any(foot_height < -0.,dim=1) & (self.root_states[:,0]>80)
+        
         # if torch.any(roll_cutoff):
         #     print(f"Episode ended due to high roll angle at timestep {self.common_step_counter}. Roll angles: {self.roll[roll_cutoff]}")
         # if torch.any(pitch_cutoff):
@@ -182,6 +187,7 @@ class Go2Robot(LeggedRobot):
         self.reset_buf |= self.time_out_buf
         self.reset_buf |= roll_cutoff
         self.reset_buf |= pitch_cutoff
+        self.reset_buf |= foot_low_cutoff
 
         # print('self.reset_buf',self.reset_buf)
         # print('roll_cutoff',roll_cutoff)
@@ -344,7 +350,7 @@ class Go2Robot(LeggedRobot):
         self.terrain.heightsamples[6*num_rows:7*num_rows, :] = stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=-0.25,init_height=850).height_field_raw
         #self.terrain.heightsamples[6*num_rows:7*num_rows,:48] = pyramid_stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=-0.5).height_field_raw
         self.terrain.heightsamples[7*num_rows:8*num_rows,:] = stepping_stones_terrain(new_sub_terrain(), stone_size=1.,
-                                                                        stone_distance=0.25, max_height=0.2, platform_size=0.).height_field_raw
+                                                                        stone_distance=0.25, max_height=0.2, platform_size=0.,specific_stones=[(5, 35), (0, 35),(10, 35),(15, 35),(20, 35),(25, 35),(30, 35),(35, 35),(40, 35),(45, 35),(50, 35)], specific_heights=[0.2, 0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2]).height_field_raw
 
 
         # 计算 edge_mask
@@ -887,6 +893,8 @@ class Go2Robot(LeggedRobot):
 
         self.feet_indices = torch.zeros(len(feet_names), dtype=torch.long, device=self.device, requires_grad=False)
         self.front_feet_indices = torch.zeros(int(len(feet_names)/2), dtype=torch.long, device=self.device, requires_grad=False)
+        self.rear_feet_indices = torch.zeros(int(len(feet_names)/2), dtype=torch.long, device=self.device, requires_grad=False)
+
         # print(feet_names)
         for i in range(len(feet_names)):
             self.feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], feet_names[i])
@@ -895,6 +903,8 @@ class Go2Robot(LeggedRobot):
         for i in range(int(len(feet_names)/2)):
             self.front_feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], feet_names[i])
 
+        for i in range(int(len(feet_names)/2)):
+            self.rear_feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], feet_names[i+2])
 
         self.penalised_contact_indices = torch.zeros(len(penalized_contact_names), dtype=torch.long, device=self.device, requires_grad=False)
         for i in range(len(penalized_contact_names)):
@@ -952,8 +962,9 @@ class Go2Robot(LeggedRobot):
             #TODO modify the inital position of the robots
             # self.env_origins[:,0:1] = torch_rand_float(90.5, 90.7, (self.num_envs,1), device=self.device)
             # self.env_origins[:,1:2] = torch_rand_float(1.66, 1.62, (self.num_envs,1), device=self.device)
-            self.env_origins[:,0:1] = torch_rand_float(70.0, 72.0, (self.num_envs,1), device=self.device)
-            self.env_origins[:,1:2] = torch_rand_float(3.0, 5.0, (self.num_envs,1), device=self.device)
+            self.env_origins[:,0:1] = torch_rand_float(1.0, 10.0, (self.num_envs,1), device=self.device)
+            self.env_origins[:,1:2] = torch_rand_float(0.5, 11.5, (self.num_envs,1), device=self.device)
+
             # put robots at the origins defined by the terrain
 
 # [72.0, 7.9, 4.0], 
@@ -1352,7 +1363,7 @@ class Go2Robot(LeggedRobot):
 
     def _reward_jump_up(self):
         jump = self.base_lin_vel[:, 2] > 0.7
-        meihuazhuang= self.root_states[:, 0] > 83.7
+        meihuazhuang= self.root_states[:, 0] > 83.5
         # print('base_lin_vel[:, 2]:',self.base_lin_vel[:, 2])
         # print('jump:',rew & meihuazhuang)
         return jump & meihuazhuang
@@ -1364,8 +1375,19 @@ class Go2Robot(LeggedRobot):
         front_foot_vel_z=self.rigid_body_states[:, self.front_feet_indices, 9]
         front_foot_vel_z_positive = torch.clamp(front_foot_vel_z, min=0.0, max=1.0)
 
+
+        # 将 self.base_lin_vel 从 (n, 3) 变为 (n, 1, 3)
+        base_lin_vel_expanded = self.base_lin_vel.unsqueeze(1)
+
+        # 在第1个维度上复制4次，使其变为 (n, 4, 3)
+        base_lin_vel_expanded = base_lin_vel_expanded.repeat(1, 2, 1)
+
+        # 然后你可以在这个新的张量上进行减法操作
+        front_foot_vel_x = self.rigid_body_states[:, self.front_feet_indices, 7] - base_lin_vel_expanded[:, :, 0]
+
+        front_foot_vel_x_positive = torch.clamp(front_foot_vel_x, min=0.0, max=1.0)
         # print('front_foot_vel_z',front_foot_vel_z)
-        meihuazhuang= self.root_states[:, 0] > 83.7
+        meihuazhuang= self.root_states[:, 0] > 83.5
         # print('stuck',stuck)
         # print('foot_vel_z<=0',foot_vel_z<=0)
         # print('stuck * foot_vel_z<=0',stuck * (foot_vel_z<=0))
@@ -1374,14 +1396,67 @@ class Go2Robot(LeggedRobot):
         # print('meihuazhuang',meihuazhuang)
         # print('jump',jump)
         # print('jump&meihuazhuang',jump&meihuazhuang)
-        return (jump&meihuazhuang) * torch.sum(front_foot_vel_z_positive,dim=1)
 
+        
+
+        return (jump&meihuazhuang) * torch.sum(front_foot_vel_z_positive+front_foot_vel_x_positive,dim=1)
+
+    def _reward_feet_edge(self):
+        foot_pos_xy=self.rigid_body_states[:, self.feet_indices, :2]
+        meihuazhuang= self.root_states[:, 0] > 83.5
+
+        # 缩放坐标，转换为索引
+        indices = (foot_pos_xy / 0.25).long()  # (num_envs, 4, 2)
+
+        # 限制索引在有效范围内
+        indices[:, :, 0] = indices[:, :, 0].clamp(0, self.height_samples.shape[0] - 1)  # 限制x索引
+        indices[:, :, 1] = indices[:, :, 1].clamp(0, self.height_samples.shape[1] - 1)  # 限制y索引
+
+        feet_at_edge = self.edge_mask[indices[:, :, 0], indices[:, :, 1]]
+    
+        self.feet_at_edge = self.contact_filt & feet_at_edge
+        rew = meihuazhuang * torch.sum(self.feet_at_edge, dim=-1)
+        # print(rew)
+        return rew
+
+
+    def _reward_edge_feet_up(self):
+        # reward feet which is at edge and is lifted(reward is recommend to be not more than 'feet_edge')
+        foot_pos_xy=self.rigid_body_states[:, self.feet_indices, :2]
+        
+        meihuazhuang= self.root_states[:, 0] > 83.5
+
+        # 缩放坐标，转换为索引
+        indices = (foot_pos_xy / 0.25).long()  # (num_envs, 4, 2)
+
+        # 限制索引在有效范围内
+        indices[:, :, 0] = indices[:, :, 0].clamp(0, self.height_samples.shape[0] - 1)  # 限制x索引
+        indices[:, :, 1] = indices[:, :, 1].clamp(0, self.height_samples.shape[1] - 1)  # 限制y索引
+
+        feet_at_edge = self.edge_mask[indices[:, :, 0], indices[:, :, 1]]
+    
+        self.feet_at_edge = self.contact_filt & feet_at_edge
+
+        edge = self.feet_at_edge
+
+
+        foot_vel_z=self.rigid_body_states[:, self.feet_indices, 9]
+        
+        # print('stuck',stuck)
+        # print('foot_vel_z<=0',foot_vel_z<=0)
+        # print('stuck * foot_vel_z<=0',stuck * (foot_vel_z<=0))
+        # print('torch.sum((foot_vel_z<=0))',torch.sum((foot_vel_z<=0)))
+        # print('edge',edge)
+        # print('(foot_vel_z<=0)',(foot_vel_z<=0))
+        # print('torch.sum(edge * torch.sum((foot_vel_z<=0),dim=1),dim=1)',torch.sum(edge * (foot_vel_z<=0),dim=1))
+        return meihuazhuang *torch.sum(edge * (foot_vel_z > 0.2),dim=1)
+    
     def _reward_foot_above_knee(self):
         """
         Reward the robot for keeping the foot height above the knee height during jumping.
         """
         jump = self.base_lin_vel[:, 2] > 0.7
-        meihuazhuang= self.root_states[:, 0] > 83.7
+        meihuazhuang= self.root_states[:, 0] > 83.5
 
         # 获取膝盖和脚的 z 轴高度（垂直高度）
         foot_height = self.rigid_body_states[:, self.feet_indices, 2]  # 获取每只脚的高度
@@ -1389,23 +1464,52 @@ class Go2Robot(LeggedRobot):
 
         # 计算脚高于膝盖的高度差
         delta_height = foot_height - knee_height
+        reward=delta_height[:,0:2].clamp(min=0.0)
 
         # 设定奖励，当脚高于膝盖时给予奖励，否则不给奖励或给予惩罚
-        reward = torch.where(delta_height > 0, delta_height, torch.tensor(0.0, device=self.device))
-
+        # reward = torch.where(delta_height > 0, delta_height, torch.tensor(0.0, device=self.device))
+        # print('foot_above_knee',reward)
         # 汇总所有脚的奖励
         return (jump&meihuazhuang) *torch.sum(reward, dim=1)
 
+    def _reward_foot_above_hip(self):
+        """
+        Reward the robot for keeping the foot height above the hip height during jumping.
+        """
+        jump = self.base_lin_vel[:, 2] > 0.7
+        meihuazhuang= self.root_states[:, 0] > 83.5
+
+        # 获取臀部和脚的 z 轴高度（垂直高度）
+        hip_height = self.rigid_body_states[:, self.hip_indices, 2]
+
+
+        foot_height = self.rigid_body_states[:, self.feet_indices, 2]  # 获取每只脚的高度
+
+        # print('foot_height',foot_height)
+        # foot_low = torch.any(foot_height < -0.01,dim=1)
+        # print('foot_low',foot_low)
+
+        # 计算脚高于膝盖的高度差
+        delta_height = foot_height - hip_height
+        reward=delta_height[:,0:2].clamp(min=0.0)
+
+        
+        # 设定奖励，当脚高于膝盖时给予奖励，否则不给奖励或给予惩罚
+        # reward = torch.where(delta_height > 0, delta_height, torch.tensor(0.0, device=self.device))
+        # print('foot_above_hip',reward)
+        # 汇总所有脚的奖励
+        return (jump&meihuazhuang) *torch.sum(reward, dim=1)
+    
     def _reward_jump_pitch(self):
         # 检查是否在跳跃状态
         jump = self.base_lin_vel[:, 2] > 0.7
-        meihuazhuang= self.root_states[:, 0] > 83.7
+        meihuazhuang= self.root_states[:, 0] > 83.5
         
         # 获取俯仰角
         _, pitch, _ = euler_from_quaternion(self.base_quat)
         
-        # 设置目标俯仰角为10度（微微向上抬头）
-        pitch_target = torch.tensor(10.0 * np.pi / 180.0, device=self.device)  # 10度转换为弧度
+        # 设置目标俯仰角为20度（微微向上抬头）
+        pitch_target = torch.tensor(20.0 * np.pi / 180.0, device=self.device)  # 10度转换为弧度
         
         # 计算俯仰角误差
         pitch_error = torch.abs(pitch - pitch_target)
@@ -1418,11 +1522,61 @@ class Go2Robot(LeggedRobot):
         
         return reward
 
+    def _reward_jump_preparation(self):
+        meihuazhuang= self.root_states[:, 0] > 83.5
+
+        # 获取前脚掌和后脚掌在垂直方向上的力
+        front_foot_forces_z = self.contact_forces[:, self.front_feet_indices, 2]
+        rear_foot_forces_z = self.contact_forces[:, self.rear_feet_indices, 2]
+
+        # 使用 contact_filt 过滤掉没有接触的脚
+        # print('rear_foot_forces_z',rear_foot_forces_z)
+
+        # 确保后脚接触地面
+        rear_contact = torch.all(rear_foot_forces_z>0, dim=1)
+
+        # print('rear_foot_forces_z>0',rear_foot_forces_z>0)
+        # print('rear_contact',rear_contact)
+        # 计算前脚掌和后脚掌的力的平均值
+        avg_front_foot_force_z = torch.mean(front_foot_forces_z, dim=1)
+        avg_rear_foot_force_z = torch.mean(rear_foot_forces_z, dim=1)
+
+        # print('avg_front_foot_force_z',avg_front_foot_force_z)
+        # print('avg_rear_foot_force_z',avg_rear_foot_force_z)
+
+        taitou=self.base_ang_vel[:,1]>0.1
+
+        jump_forward = self.base_lin_vel[:, 0] > 0.1
+        # 条件判断，前脚掌力大于后脚掌力的两倍
+        jump_preparation_condition = (avg_front_foot_force_z > 5 * avg_rear_foot_force_z) & (rear_contact &jump_forward&taitou)
+        
+        # print('jump',jump_preparation_condition & meihuazhuang)
+        # if any(jump_preparation_condition & meihuazhuang):
+        #     print(avg_front_foot_force_z/(avg_rear_foot_force_z+1e-5))
+        # print('jump_preparation_condition',jump_preparation_condition)
+        # 根据条件判断给予奖励
+        reward = jump_preparation_condition & meihuazhuang
+
+        return reward
+
+
+
+    def _reward_air_taitou(self):
+        jump_time = self.base_lin_vel[:, 2] > 0.7
+        _, pitch, _ = euler_from_quaternion(self.base_quat)
+        pitch_positive = pitch>0
+        meihuazhuang= self.root_states[:, 0] > 83.5
+        taitou=torch.clamp(self.base_ang_vel[:,1], min=0.0)
+
+        return (jump_time & meihuazhuang * pitch_positive) * taitou
+
+        
+
     def _reward_air_foward(self):
         # 检查是否在跳跃状态
         jump_time = self.base_lin_vel[:, 2] > 0.7
 
-        meihuazhuang= self.root_states[:, 0] > 83.7
+        meihuazhuang= self.root_states[:, 0] > 83.5
 
         # 计算目标方向的单位向量
         norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)
@@ -1462,7 +1616,11 @@ class Go2Robot(LeggedRobot):
     #     return rew
 
     def _reward_reach_all_goal(self):
-        return self.cur_goal_idx >= self.cfg.terrain.num_goals
+
+        rew=(self.cur_goal_idx >= (self.cfg.terrain.num_goals -2)).float()
+        rew+=(self.cur_goal_idx >= (self.cfg.terrain.num_goals -1)).float()
+        rew+=(self.cur_goal_idx >= (self.cfg.terrain.num_goals)).float()
+        return self.reset_buf * rew 
 
     def _reward_feet_height(self):
         # penalize feet too low
@@ -1498,9 +1656,9 @@ class Go2Robot(LeggedRobot):
          
         # ground_height_at_feet = self.ground_height_tmp.gather(2, px.unsqueeze(-1).expand(-1, -1, -1, py.size(-1))) \
         #                                          .gather(3, py.unsqueeze(-2).expand(-1, -1, px.size(-1), -1)).squeeze(-1).squeeze(-1)
-        print('feet_ground_heights',feet_ground_heights) 
-        print('foot_pos',self.foot_pos[:,:,2]) 
-        print('feet_ground_heights>foot_pos',feet_ground_heights>self.foot_pos[:,:,2]+0.05) 
+        # print('feet_ground_heights',feet_ground_heights) 
+        # print('foot_pos',self.foot_pos[:,:,2]) 
+        # print('feet_ground_heights>foot_pos',feet_ground_heights>self.foot_pos[:,:,2]+0.05) 
         rew=torch.sum(feet_ground_heights>self.foot_pos[:,:,2]+0.05,dim=1)    #地面比脚高的个数
         return rew
     #     #self.foot_pos
@@ -1510,51 +1668,7 @@ class Go2Robot(LeggedRobot):
 
     #     return torch.sum((self.foot_pos[:, :, 2] - self.measured_heights).clip(min=0.), dim=1)
 
-    def _reward_feet_edge(self):
-            foot_pos_xy=self.rigid_body_states[:, self.feet_indices, :2]
-            
-            # 缩放坐标，转换为索引
-            indices = (foot_pos_xy / 0.25).long()  # (num_envs, 4, 2)
 
-            # 限制索引在有效范围内
-            indices[:, :, 0] = indices[:, :, 0].clamp(0, self.height_samples.shape[0] - 1)  # 限制x索引
-            indices[:, :, 1] = indices[:, :, 1].clamp(0, self.height_samples.shape[1] - 1)  # 限制y索引
-
-            feet_at_edge = self.edge_mask[indices[:, :, 0], indices[:, :, 1]]
-        
-            self.feet_at_edge = self.contact_filt & feet_at_edge
-            rew = (self.root_states[:,0] > 83.5) * torch.sum(self.feet_at_edge, dim=-1)
-            # print(rew)
-            return rew
-
-
-    def _reward_edge_feet_up(self):
-        # reward feet which is at edge and is lifted(reward is recommend to be not more than 'feet_edge')
-        foot_pos_xy=self.rigid_body_states[:, self.feet_indices, :2]
-        
-        # 缩放坐标，转换为索引
-        indices = (foot_pos_xy / 0.25).long()  # (num_envs, 4, 2)
-
-        # 限制索引在有效范围内
-        indices[:, :, 0] = indices[:, :, 0].clamp(0, self.height_samples.shape[0] - 1)  # 限制x索引
-        indices[:, :, 1] = indices[:, :, 1].clamp(0, self.height_samples.shape[1] - 1)  # 限制y索引
-
-        feet_at_edge = self.edge_mask[indices[:, :, 0], indices[:, :, 1]]
-    
-        self.feet_at_edge = self.contact_filt & feet_at_edge
-
-        edge = self.feet_at_edge
-
-
-        foot_vel_z=self.rigid_body_states[:, self.feet_indices, 9]
-        # print('stuck',stuck)
-        # print('foot_vel_z<=0',foot_vel_z<=0)
-        # print('stuck * foot_vel_z<=0',stuck * (foot_vel_z<=0))
-        # print('torch.sum((foot_vel_z<=0))',torch.sum((foot_vel_z<=0)))
-        # print('edge',edge)
-        # print('(foot_vel_z<=0)',(foot_vel_z<=0))
-        # print('torch.sum(edge * torch.sum((foot_vel_z<=0),dim=1),dim=1)',torch.sum(edge * (foot_vel_z<=0),dim=1))
-        return (self.root_states[:,0] > 83.5) *torch.sum(edge * (foot_vel_z > 0.1),dim=1)
     
     def _reward_stumble(self):
         # Penalize feet hitting vertical surfaces

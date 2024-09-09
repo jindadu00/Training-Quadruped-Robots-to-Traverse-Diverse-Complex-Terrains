@@ -10,7 +10,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         num_actions = 12
         env_spacing = 3.  # not used with heightfields/trimeshes 
         send_timeouts = True # send time out information to the algorithm
-        episode_length_s = 20 # episode length in seconds
+        episode_length_s = 200 # episode length in seconds
 
 
         history_encoding = True
@@ -63,109 +63,70 @@ class Go2RoughCfg( LeggedRobotCfg ):
         #TODO modify the goals
         
         coordinates = [
-            # # plane
+            # plane
 
-            # # # ++++++++++++++
-            # # [6.0, 9.0, 0.0],
-            # # [4.0, 6.0, 0.0],
-            # # [6.0, 3.0, 0.0],
-            # # [8.0, 6.0, 0.0],
-            # # # ---------------
+            [11.0, 6.0, 0.0],
 
-            # [10.0, 6.0, 0.0],
-
-            # # pyramid
-            # [13.0, 6.0, -0.2],
-            # [15.0, 6.05, -0.5],
-            # [17.5, 6.1, -1.0],
-            # [20.0, 6.2, -0.75], 
-            # [22.0, 6.3, -0.5], 
-            # # # ++++++++++++++
-            # # [22.0, 8.0, 0],
-            # # [20.0, 8.05, 0],
-            # # [17.5, 8.1, -0.3],
-            # # [15.0, 8.2, -0.3], 
-            # # [13.0, 8.3, -0.1], 
-            # # [13.0, 3.0, -0.1],
-            # # [15.0, 3.05, -0.2],
-            # # [17.5, 3.1, -0.3],
-            # # [20.0, 3.2, -0.2], 
-            # # [22.0, 3.3, -0.1], 
-            # # # ---------------
+            # pyramid
+            [13.0, 6.0, -0.2],
+            [15.0, 6.05, -0.5],
+            [17.5, 6.1, -1.0],
+            [20.0, 6.2, -0.75], 
+            [22.0, 6.3, -0.5], 
             
-            # # forest
-            # [25.0, 6.5, 0.3], 
-            # [27.5, 6.7, 0.3],
-            # [30.0, 6.9, 0.3], 
-            # [33.0, 7.1, 0.3], 
+            # forest
+            [25.0, 6.5, 0.3], 
+            [27.5, 6.7, 0.3],
+            [30.0, 6.9, 0.3], 
+            [33.0, 7.1, 0.3], 
 
 
-            # # # ++++++++++++++
-            # # [30.0, 6, 0.3], 
-            # # [27.5, 5, 0.3],
-            # # [25.0, 4, 0.3], 
-            # # [25.0, 6.5, 0.3], 
-            # # [27.5, 6.7, 0.3],
-            # # [30.0, 6.9, 0.3], 
-            # # [33.0, 7.1, 0.3], 
-            # # # ---------------
-            # # matrix
-            # [36.5, 7.4, 0.0], 
-            # [38.5, 8.0, 0.0], 
-            # [40.0, 9.0, 0.5], 
-            # [42.0, 9.5, 0.7], 
-            # [43.0, 10.0, 0.0], 
-            # [47.0, 10.0, 0.2], 
-            # [48.0, 10.0, 0.2], 
-            # # wave
-            # [49.0, 9.0, 0.5], 
-            # [50.0, 9.0, 0.0], 
-            # [52.0, 8.0, 0.5], 
-            # [53.0, 7.5, 1.0], 
-            # [57.0, 6.0, 1.0], 
-            # # step up
-            # [60.0, 6.0, 0.7], 
-            # [61.0, 6.3, 1.0], 
-            # [63.0, 6.6, 1.5], 
-            # [65.0, 6.9, 2.5], 
-            # [67.0, 7.2, 3.0], 
-            # [69.0, 7.5, 3.5], 
-            # [71.0, 7.8, 4.0], 
-            # [72.0, 7.9, 4.0], 
+            # matrix
+            [36.5, 7.4, 0.0], 
+            [38.5, 8.0, 0.0], 
+            [40.0, 9.0, 0.5], 
+            [42.0, 9.5, 0.7], 
+            [43.0, 10.0, 0.0], 
+            [47.0, 10.0, 0.2], 
+            [48.0, 10.0, 0.2], 
+            # wave
+            [49.0, 9.0, 0.5], 
+            [50.0, 9.0, 0.0], 
+            [52.0, 8.0, 0.5], 
+            [53.0, 7.5, 1.0], 
+            [57.0, 6.0, 1.0], 
+            # step up
+            [60.0, 6.0, 0.7], 
+            [61.0, 6.0, 1.0], 
+            [63.0, 6.5, 1.5], 
+            [65.0, 7.0, 2.5], 
+            [67.0, 7.5, 3.0], 
+            [69.0, 8.0, 3.5], 
+            [71.0, 8.5, 4.0], 
+            [72.0, 9.0, 4.0], 
 
-            # # ++++++++++++++++++++++
-            # [72.0, 9.0, 4.5], 
-            # [71.0, 9.0, 4.0],             
-            # [67.0, 9.0, 3.0], 
-            # [63.0, 9.0, 1.5], 
-            # [61.0, 9.0, 1.0], 
-            # [60.0, 8.0, 0.7], 
-            # [65.0, 7.0, 2.5], 
-            # [69.0, 6.0, 3.5], 
-            # [72.0, 5.0, 4.5], 
-            # # --------------------
             # step down
-            [73.0, 3.90, 4.0], 
-            [74.0, 3.90, 3.5], 
-            [76.0, 3.90, 3.0], 
-            [78.0, 3.90, 2.5], 
-            [80.0, 3.90, 2.0], 
-            [82.0, 3.90, 1.5], 
-            [83.0, 3.90, 1.0], 
+            [73.0, 9.11, 4.0], 
+            [74.0, 9.11, 3.5], 
+            [76.0, 9.11, 3.0], 
+            [78.0, 9.11, 2.5], 
+            [80.0, 9.11, 2.0], 
+            [82.0, 9.11, 1.5], 
+            [83.0, 9.11, 1.0], 
             # quincuncial piles
-            [83.3, 3.90, 0.5], 
-            [85.0, 3.90, 0.1], 
-            [86.4, 3.90, 0.1],
-            # [88.1, 1.64, 0.1], 
-            # [89.3, 1.64, 0.1], 
-            # [90.6, 1.64, 0.1], 
-            # [91.8, 1.64, 0.1], 
-            # [93.1, 1.64, 0.1], 
-            # [94.3, 1.64, 0.1], 
-            # [95.4, 1.64, 0.1], 
+            [84.4, 9.11, 0.3], 
+            [85.7, 9.11, 0.3], 
+            [86.8, 9.11, 0.3],
+            [88.1, 9.11, 0.3], 
+            # [89.3, 9.11, 0.3], 
+            # [90.6, 9.11, 0.3], 
+            # [91.8, 9.11, 0.3], 
+            # [93.1, 9.11, 0.3], 
+            # [94.3, 9.11, 0.3], 
+            # [95.4, 9.11, 0.3], 
             # # final
-            # [97.9, 1.64, 0.1], 
-            # [98.4, 1.64, 0.1], 
+            # [97.9, 9.11, 0.1], 
+            # [98.4, 9.11, 0.1], 
             # [100.0, 2, 0.1], 
             # [103.0, 3, 0.1], 
             # [105.0, 5.35, 0.1], 
@@ -200,7 +161,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         resampling_time = 10. # time before command are changed[s]
         heading_command = True # if true: compute ang vel command from heading error
         class ranges:
-            lin_vel_x = [0.35, 2.00] # min max [m/s]
+            lin_vel_x = [0.3, 2.0] # min max [m/s]
             lin_vel_y = [0., 0.]   # min max [m/s]
             ang_vel_yaw = [0., 0.]    # min max [rad/s]
             heading = [0, 0]
@@ -225,7 +186,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         flip_visual_attachments = True
     class domain_rand:
         randomize_friction = False
-        friction_range = [0.2, 1.5]
+        friction_range = [1.0, 1.5]
         randomize_base_mass = False
         added_mass_range = [-4., 4.]
         push_robots = False
@@ -244,15 +205,15 @@ class Go2RoughCfg( LeggedRobotCfg ):
             termination = -0.0
             tracking_lin_vel = 0.0
             tracking_ang_vel = 0.0
-            lin_vel_z = -0.00
-            ang_vel_xy = -0.0
-            orientation = -0.0
-            torques = -0.000
+            # lin_vel_z = -0.00
+            # ang_vel_xy = -0.0
+            # orientation = -0.0
+            # torques = -0.000
             dof_vel = -0.0
-            dof_acc = -0.0
+            # dof_acc = -0.0
             base_height = -0.000
             feet_air_time = 0.5
-            collision = -0.0
+            # collision = -0.0
             feet_stumble = -0.0
             stand_still = -0.001
             dof_pos_limits = -0.5
@@ -265,7 +226,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
             # tracking rewards
             tracking_goal_vel = 2.0
             tracking_yaw = 0.5
-            reach_all_goal = 1000.0
+            reach_all_goal = 30000.0
             # regularization rewards
             lin_vel_z = -0.4
             ang_vel_xy = -0.04
@@ -279,18 +240,30 @@ class Go2RoughCfg( LeggedRobotCfg ):
             dof_error = -0.04
             
             # jump
-            jump_up = 3.0
-            jump_lift_front_feet = 3.0
-            jump_pitch = -5.0
-            
-            air_foward = 2.0
+            # jump_up = 0.1
+            # air_taitou = 5.0
+            # jump_lift_front_feet = 0.5
+            # jump_pitch = -10.0
+            # jump_preparation = 15.0
+            # air_foward = 1.0
+            # feet_height = -0.0
+            jump_up = 0.1
+            air_taitou = 0.0
+            jump_lift_front_feet = 0.0
+            jump_pitch = -0.0
+            jump_preparation = 0.0
+            air_foward = 0.0
             feet_height = -0.0
             
-            
             # stumble
-            edge_feet_up = 1.0
-            foot_above_knee = 5.0
-            feet_edge = -2.0
+            # edge_feet_up = 1.0
+            # foot_above_knee = 5.0
+            # foot_above_hip = 20.0
+            # feet_edge = -2.0
+            edge_feet_up = 0.0
+            foot_above_knee = 0.0
+            foot_above_hip = 0.0
+            feet_edge = -1.0
             feet_stumble = -1.0
             
 

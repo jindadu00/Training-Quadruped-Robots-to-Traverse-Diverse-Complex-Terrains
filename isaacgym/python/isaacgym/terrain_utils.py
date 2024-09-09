@@ -227,7 +227,65 @@ def pyramid_stairs_terrain(terrain, step_width, step_height, platform_size=1.):
     return terrain
 
 
-def stepping_stones_terrain(terrain, stone_size, stone_distance, max_height, platform_size=1., depth=-10):
+# def stepping_stones_terrain(terrain, stone_size, stone_distance, max_height, platform_size=1., depth=-10):
+#     """
+#     Generate a stepping stones terrain
+
+#     Parameters:
+#         terrain (terrain): the terrain
+#         stone_size (float): horizontal size of the stepping stones [meters]
+#         stone_distance (float): distance between stones (i.e size of the holes) [meters]
+#         max_height (float): maximum height of the stones (positive and negative) [meters]
+#         platform_size (float): size of the flat platform at the center of the terrain [meters]
+#         depth (float): depth of the holes (default=-10.) [meters]
+#     Returns:
+#         terrain (SubTerrain): update terrain
+#     """
+#     # switch parameters to discrete units
+#     stone_size = int(stone_size / terrain.horizontal_scale)
+#     stone_distance = int(stone_distance / terrain.horizontal_scale)
+#     max_height = int(max_height / terrain.vertical_scale)
+#     platform_size = int(platform_size / terrain.horizontal_scale)
+#     height_range = np.arange(-max_height-1, max_height, step=1)
+
+#     start_x = 0
+#     start_y = 0
+#     terrain.height_field_raw[:, :] = int(depth / terrain.vertical_scale)
+#     if terrain.length >= terrain.width:
+#         while start_y < terrain.length:
+#             stop_y = min(terrain.length, start_y + stone_size)
+#             start_x = np.random.randint(0, stone_size)
+#             # fill first hole
+#             stop_x = max(0, start_x - stone_distance)
+#             terrain.height_field_raw[0: stop_x, start_y: stop_y] = np.random.choice(height_range)
+#             # fill row
+#             while start_x < terrain.width:
+#                 stop_x = min(terrain.width, start_x + stone_size)
+#                 terrain.height_field_raw[start_x: stop_x, start_y: stop_y] = np.random.choice(height_range)
+#                 start_x += stone_size + stone_distance
+#             start_y += stone_size + stone_distance
+#     elif terrain.width > terrain.length:
+#         while start_x < terrain.width:
+#             stop_x = min(terrain.width, start_x + stone_size)
+#             start_y = np.random.randint(0, stone_size)
+#             # fill first hole
+#             stop_y = max(0, start_y - stone_distance)
+#             terrain.height_field_raw[start_x: stop_x, 0: stop_y] = np.random.choice(height_range)
+#             # fill column
+#             while start_y < terrain.length:
+#                 stop_y = min(terrain.length, start_y + stone_size)
+#                 terrain.height_field_raw[start_x: stop_x, start_y: stop_y] = np.random.choice(height_range)
+#                 start_y += stone_size + stone_distance
+#             start_x += stone_size + stone_distance
+
+#     x1 = (terrain.width - platform_size) // 2
+#     x2 = (terrain.width + platform_size) // 2
+#     y1 = (terrain.length - platform_size) // 2
+#     y2 = (terrain.length + platform_size) // 2
+#     terrain.height_field_raw[x1:x2, y1:y2] = 0
+#     return terrain
+
+def stepping_stones_terrain(terrain, stone_size, stone_distance, max_height, platform_size=1., depth=-10, specific_stones=None, specific_heights=None):
     """
     Generate a stepping stones terrain
 
@@ -238,8 +296,11 @@ def stepping_stones_terrain(terrain, stone_size, stone_distance, max_height, pla
         max_height (float): maximum height of the stones (positive and negative) [meters]
         platform_size (float): size of the flat platform at the center of the terrain [meters]
         depth (float): depth of the holes (default=-10.) [meters]
+        specific_stones (list of tuples): list of (x, y) coordinates for specific stones to modify
+        specific_heights (list of floats): list of heights corresponding to the specific stones [meters]
+        
     Returns:
-        terrain (SubTerrain): update terrain
+        terrain (SubTerrain): updated terrain
     """
     # switch parameters to discrete units
     stone_size = int(stone_size / terrain.horizontal_scale)
@@ -251,6 +312,12 @@ def stepping_stones_terrain(terrain, stone_size, stone_distance, max_height, pla
     start_x = 0
     start_y = 0
     terrain.height_field_raw[:, :] = int(depth / terrain.vertical_scale)
+    
+    # Create a dictionary for quick lookup of specific stone heights
+    specific_stone_dict = {}
+    if specific_stones and specific_heights:
+        specific_stone_dict = {stone: int(height / terrain.vertical_scale) for stone, height in zip(specific_stones, specific_heights)}
+    
     if terrain.length >= terrain.width:
         while start_y < terrain.length:
             stop_y = min(terrain.length, start_y + stone_size)
@@ -261,7 +328,14 @@ def stepping_stones_terrain(terrain, stone_size, stone_distance, max_height, pla
             # fill row
             while start_x < terrain.width:
                 stop_x = min(terrain.width, start_x + stone_size)
-                terrain.height_field_raw[start_x: stop_x, start_y: stop_y] = np.random.choice(height_range)
+                for stone, height in specific_stone_dict.items():
+                    if start_x <= stone[0] < stop_x and start_y <= stone[1] < stop_y:
+                        # Set specific stone height
+                        terrain.height_field_raw[start_x: stop_x, start_y: stop_y] = height
+                        break
+                else:
+                    # If no specific stone, fill with random height
+                    terrain.height_field_raw[start_x: stop_x, start_y: stop_y] = np.random.choice(height_range)
                 start_x += stone_size + stone_distance
             start_y += stone_size + stone_distance
     elif terrain.width > terrain.length:
@@ -274,7 +348,14 @@ def stepping_stones_terrain(terrain, stone_size, stone_distance, max_height, pla
             # fill column
             while start_y < terrain.length:
                 stop_y = min(terrain.length, start_y + stone_size)
-                terrain.height_field_raw[start_x: stop_x, start_y: stop_y] = np.random.choice(height_range)
+                for stone, height in specific_stone_dict.items():
+                    if start_x <= stone[0] < stop_x and start_y <= stone[1] < stop_y:
+                        # Set specific stone height
+                        terrain.height_field_raw[start_x: stop_x, start_y: stop_y] = height
+                        break
+                else:
+                    # If no specific stone, fill with random height
+                    terrain.height_field_raw[start_x: stop_x, start_y: stop_y] = np.random.choice(height_range)
                 start_y += stone_size + stone_distance
             start_x += stone_size + stone_distance
 
@@ -283,7 +364,10 @@ def stepping_stones_terrain(terrain, stone_size, stone_distance, max_height, pla
     y1 = (terrain.length - platform_size) // 2
     y2 = (terrain.length + platform_size) // 2
     terrain.height_field_raw[x1:x2, y1:y2] = 0
+    
     return terrain
+
+
 
 
 def convert_heightfield_to_trimesh(height_field_raw, horizontal_scale, vertical_scale, slope_threshold=None):

@@ -107,7 +107,7 @@ heightfield[4*num_rows:5*num_rows, :] = wave_terrain(new_sub_terrain(), num_wave
 heightfield[5*num_rows:6*num_rows, :] = stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=-0.5).height_field_raw
 heightfield[6*num_rows:7*num_rows, :] = pyramid_stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=-0.5).height_field_raw
 heightfield[7*num_rows:8*num_rows, :] = stepping_stones_terrain(new_sub_terrain(), stone_size=1.,
-                                                                stone_distance=1., max_height=0.5, platform_size=0.).height_field_raw
+                                                                stone_distance=0.1, max_height=0.5, platform_size=0.).height_field_raw
 
 # add the terrain as a triangle mesh
 vertices, triangles = convert_heightfield_to_trimesh(heightfield, horizontal_scale=horizontal_scale, vertical_scale=vertical_scale, slope_threshold=1.5)
