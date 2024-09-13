@@ -67,7 +67,7 @@ class LeggedRobot(BaseTask):
         # self.sim_params.physx.max_gpu_contact_pairs = self.sim_params.physx.max_gpu_contact_pairs * 20
 
         self.height_samples = None
-        self.debug_viz = True
+        self.debug_viz = False
         self.init_done = False
         self._parse_cfg(self.cfg)
         super().__init__(self.cfg, sim_params, physics_engine, sim_device, headless)
@@ -83,12 +83,28 @@ class LeggedRobot(BaseTask):
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
         self.post_physics_step()
 
+    def reindex_feet(self, vec):
+        return vec[:, [1, 0, 3, 2]]
+
+    def reindex(self, vec):
+        return vec[:, [3, 4, 5, 0, 1, 2, 9, 10, 11, 6, 7, 8]]
+
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()
 
         Args:
             actions (torch.Tensor): Tensor of shape (num_envs, num_actions_per_env)
         """
+
+        actions = self.reindex(actions)
+
+        actions.to(self.device)
+        self.action_history_buf = torch.cat([self.action_history_buf[:, 1:].clone(), actions[:, None, :].clone()], dim=1)
+
+        self.global_counter += 1
+        self.total_env_steps_counter += 1
+
+
         clip_actions = self.cfg.normalization.clip_actions
         self.actions = torch.clip(actions, -clip_actions, clip_actions).to(self.device)
         # step physics and render each frame
@@ -216,14 +232,25 @@ class LeggedRobot(BaseTask):
     def compute_observations(self):
         """ Computes observations
         """
+        imu_obs = torch.stack((self.roll, self.pitch), dim=1)
+        if self.global_counter % 5 == 0:
+            self.delta_yaw = self.target_yaw - self.yaw
+            self.delta_next_yaw = self.next_target_yaw - self.yaw
         self.obs_buf = torch.cat((  self.base_lin_vel * self.obs_scales.lin_vel,
                                     self.base_ang_vel  * self.obs_scales.ang_vel,
-                                    self.projected_gravity,
-                                    self.commands[:, :3] * self.commands_scale,
-                                    (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
-                                    self.dof_vel * self.obs_scales.dof_vel,
-                                    self.actions
+                                    imu_obs,
+                                    self.delta_yaw[:, None],
+                                    self.delta_next_yaw[:, None],
+                                    self.commands[:, :1] * self.commands_scale,
+                                    (self.env_class != 0).float()[:, None], 
+                                    (self.env_class == 0).float()[:, None],
+                                    self.reindex((self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos),
+                                    self.reindex(self.dof_vel * self.obs_scales.dof_vel),
+                                    self.reindex(self.action_history_buf[:, -1]),
+                                    self.reindex_feet(self.contact_filt.float()-0.5),
                                     ),dim=-1)
+        print('(self.env_class != 0).float()[:, None]',(self.env_class != 0).float()[:, None])
+        print('(self.env_class == 0).float()[:, None]',(self.env_class == 0).float()[:, None])
         # add perceptive inputs if not blind
         if self.cfg.terrain.measure_heights:
             heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements

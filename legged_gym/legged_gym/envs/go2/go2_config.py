@@ -4,9 +4,15 @@ class Go2RoughCfg( LeggedRobotCfg ):
 
     class env( LeggedRobotCfg.env ):
         num_envs = 4096
-        num_observations = 271
+        num_obs = 275
+        history_len = 10
+        n_proprio = 55
+        num_observations = num_obs + history_len*n_proprio
+
+
         symmetric = False  #True :  set num_privileged_obs = None;    false: num_privileged_obs = observations + 187 ,set "terrain.measure_heights" to true
-        num_privileged_obs = 271
+        num_privileged_obs = num_obs + history_len*n_proprio
+
         num_actions = 12
         env_spacing = 3.  # not used with heightfields/trimeshes 
         send_timeouts = True # send time out information to the algorithm
@@ -64,7 +70,6 @@ class Go2RoughCfg( LeggedRobotCfg ):
         
         coordinates = [
             # plane
-
             [11.0, 6.0, 0.0],
 
             # pyramid
@@ -80,58 +85,59 @@ class Go2RoughCfg( LeggedRobotCfg ):
             [30.0, 6.9, 0.3], 
             [33.0, 7.1, 0.3], 
 
-
             # matrix
-            [36.5, 7.4, 0.0], 
-            [38.5, 8.0, 0.0], 
-            [40.0, 9.0, 0.5], 
-            [42.0, 9.5, 0.7], 
-            [43.0, 10.0, 0.0], 
-            [47.0, 10.0, 0.2], 
-            [48.0, 10.0, 0.2], 
+            [36.5, 7.4, 0.3], 
+            [38.5, 8.0, 0.3], 
+            [40.0, 9.0, 0.3], 
+            [42.0, 9.5, 0.3], 
+            # [43.0, 10.0, 0.3], 
+            [47.0, 10.0, 0.3], 
+            [48.0, 10.0, 0.3], 
             # wave
-            [49.0, 9.0, 0.5], 
-            [50.0, 9.0, 0.0], 
-            [52.0, 8.0, 0.5], 
-            [53.0, 7.5, 1.0], 
-            [57.0, 6.0, 1.0], 
+            [49.0, 9.0, 0.3], 
+            [50.0, 8.5, 0.2], 
+            # [52.0, 7.5, -0.1], 
+            # [53.0, 6.5, 0.3], 
+            # [54.0, 6.0, 0.7], 
+            [55.0, 6.0, 1.0], 
+            [56.0, 6.0, -0.3], 
+            [57.0, 6.0, 0.7], 
             # step up
             [60.0, 6.0, 0.7], 
-            [61.0, 6.0, 1.0], 
+            # [61.0, 6.0, 1.0], 
             [63.0, 6.5, 1.5], 
-            [65.0, 7.0, 2.5], 
+            # [65.0, 7.0, 2.5], 
             [67.0, 7.5, 3.0], 
-            [69.0, 8.0, 3.5], 
-            [71.0, 8.5, 4.0], 
-            [72.0, 9.0, 4.0], 
+            # [69.0, 8.0, 3.5], 
+            [71.0, 8.0, 4.0], 
+            [72.0, 8.0, 4.3], 
 
             # step down
-            [73.0, 9.11, 4.0], 
-            [74.0, 9.11, 3.5], 
-            [76.0, 9.11, 3.0], 
-            [78.0, 9.11, 2.5], 
-            [80.0, 9.11, 2.0], 
-            [82.0, 9.11, 1.5], 
-            [83.0, 9.11, 1.0], 
+            [73.0, 8.0, 4.0], 
+            # [74.0, 8.0, 3.5], 
+            [76.0, 8.0, 3.0], 
+            [78.0, 8.0, 2.5], 
+            [80.0, 8.0, 2.0], 
+            # [82.0, 8.0, 1.5], 
+            [83.0, 8.0, 1.0], 
             # quincuncial piles
-            [84.4, 9.11, 0.3], 
-            [85.7, 9.11, 0.3], 
-            [86.8, 9.11, 0.3],
-            [88.1, 9.11, 0.3], 
-            # [89.3, 9.11, 0.3], 
-            # [90.6, 9.11, 0.3], 
-            # [91.8, 9.11, 0.3], 
-            # [93.1, 9.11, 0.3], 
-            # [94.3, 9.11, 0.3], 
-            # [95.4, 9.11, 0.3], 
+            [84.4, 8.0, 0.3], 
+            [86.0, 8.0, 0.3], 
+            [87.5, 8.0, 0.3],
+            # [88.1, 8.0, 0.3], 
+            # [89.3, 8.0, 0.3], 
+            # [90.6, 8.0, 0.3], 
+            # [91.8, 8.0, 0.3], 
+            # [93.1, 8.0, 0.3], 
+            # [94.3, 8.0, 0.3], 
+            # [95.4, 8.0, 0.3], 
             # # final
-            # [97.9, 9.11, 0.1], 
-            # [98.4, 9.11, 0.1], 
+            # [97.9, 8.0, 0.1], 
+            # [98.4, 8.0, 0.1], 
             # [100.0, 2, 0.1], 
             # [103.0, 3, 0.1], 
             # [105.0, 5.35, 0.1], 
             # [107.9, 5.35, 0.1], 
-
         ]
         num_goals = coordinates.__len__()
         
@@ -180,7 +186,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/go2/urdf/go2.urdf'
         name = "go2"
         foot_name = "foot"
-        penalize_contacts_on = ["thigh", "calf"]
+        penalize_contacts_on = ["thigh", "calf","base"]
         terminate_after_contacts_on = ["base"]
         self_collisions = 0 # 1 to disable, 0 to enable...bitwise filter
         flip_visual_attachments = True
@@ -226,7 +232,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
             # tracking rewards
             tracking_goal_vel = 2.0
             tracking_yaw = 0.5
-            reach_all_goal = 30000.0
+            reach_all_goal = 1000.0
             # regularization rewards
             lin_vel_z = -0.4
             ang_vel_xy = -0.04
@@ -247,6 +253,8 @@ class Go2RoughCfg( LeggedRobotCfg ):
             # jump_preparation = 15.0
             # air_foward = 1.0
             # feet_height = -0.0
+
+
             jump_up = 0.1
             air_taitou = 0.0
             jump_lift_front_feet = 0.0
