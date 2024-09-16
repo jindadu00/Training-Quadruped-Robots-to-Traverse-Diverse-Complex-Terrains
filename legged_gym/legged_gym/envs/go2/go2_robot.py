@@ -170,8 +170,11 @@ class Go2Robot(LeggedRobot):
 
 
         #TODO temporary termination
-        foot_height = self.rigid_body_states[:, self.feet_indices[:2], 2]
-        foot_low_cutoff = torch.any(foot_height < -0.,dim=1) & (self.root_states[:,0]>80)
+        foot_height = self.rigid_body_states[:, self.feet_indices, 2]
+        # print('torch.sum(foot_height<0.0,dim=1)',(torch.sum(foot_height,dim=1)<0.0))
+        # print('self.root_states[:,0]>80',self.root_states[:,0]>80)
+        # print('torch.sum(foot_height<0.0,dim=1) * (self.root_states[:,0]>80)',(torch.sum(foot_height,dim=1)<0.0) * (self.root_states[:,0]>80))
+        foot_low_cutoff = (torch.sum(foot_height,dim=1)<0.0) * (self.root_states[:,0]>80)
         
         # if torch.any(roll_cutoff):
         #     print(f"Episode ended due to high roll angle at timestep {self.common_step_counter}. Roll angles: {self.roll[roll_cutoff]}")
@@ -1022,8 +1025,8 @@ class Go2Robot(LeggedRobot):
             #TODO modify the inital position of the robots
             # self.env_origins[:,0:1] = torch_rand_float(90.5, 90.7, (self.num_envs,1), device=self.device)
             # self.env_origins[:,1:2] = torch_rand_float(1.66, 1.62, (self.num_envs,1), device=self.device)
-            self.env_origins[:,0:1] = torch_rand_float(1.0, 10.0, (self.num_envs,1), device=self.device)
-            self.env_origins[:,1:2] = torch_rand_float(0.5, 11.5, (self.num_envs,1), device=self.device)
+            self.env_origins[:,0:1] = torch_rand_float(76.0, 82.0, (self.num_envs,1), device=self.device)
+            self.env_origins[:,1:2] = torch_rand_float(2.5, 9.5, (self.num_envs,1), device=self.device)
 
             # put robots at the origins defined by the terrain
 
@@ -1677,8 +1680,8 @@ class Go2Robot(LeggedRobot):
 
     def _reward_reach_all_goal(self):
 
-        rew=(self.cur_goal_idx >= (self.cfg.terrain.num_goals -1)).float()
-        rew+=(self.cur_goal_idx >= (self.cfg.terrain.num_goals)).float()*5.0
+        rew=(self.cur_goal_idx >= (self.cfg.terrain.num_goals)).float()
+        # rew+=(self.cur_goal_idx >= (self.cfg.terrain.num_goals)).float()*9
         return self.reset_buf * rew 
 
     def _reward_feet_height(self):

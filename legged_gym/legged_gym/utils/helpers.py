@@ -107,6 +107,7 @@ def get_load_path(root, load_run=-1, checkpoint=-1):
         #TODO sort by date to handle change of month
         runs.sort()
         if 'exported' in runs: runs.remove('exported')
+        print('root:',root)
         print('runs:',runs)
         last_run = os.path.join(root, runs[-3])
         print('last_run:',last_run)
