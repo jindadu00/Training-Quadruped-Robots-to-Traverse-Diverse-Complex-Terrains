@@ -150,7 +150,7 @@ class Go2Robot(LeggedRobot):
         self.last_actions[:] = self.actions[:]
         self.last_dof_vel[:] = self.dof_vel[:]
         self.last_root_vel[:] = self.root_states[:, 7:13]
-        self.env_class = (self.root_states[:, 0] > 83.5).float().unsqueeze(0).reshape(self.num_envs,-1)
+        self.env_class = ((self.root_states[:, 0] > 83.5) & (self.root_states[:, 0] < 96.5)).float().unsqueeze(0).reshape(self.num_envs,-1)
         # print('env_class',self.env_class)
         # self.env_class = ((self.root_states[:, 0]+0.5)/12).int().reshape(-1,1)
         # self.root_states[:, 0] = (self.root_states[:, 0] > 83.5).float()
@@ -174,7 +174,7 @@ class Go2Robot(LeggedRobot):
         # print('torch.sum(foot_height<0.0,dim=1)',(torch.sum(foot_height,dim=1)<0.0))
         # print('self.root_states[:,0]>80',self.root_states[:,0]>80)
         # print('torch.sum(foot_height<0.0,dim=1) * (self.root_states[:,0]>80)',(torch.sum(foot_height,dim=1)<0.0) * (self.root_states[:,0]>80))
-        foot_low_cutoff = (torch.sum(foot_height,dim=1)<0.0) * (self.root_states[:,0]>80)
+        foot_low_cutoff = (torch.sum(foot_height,dim=1)<-1.0) * (self.root_states[:,0]>80)
         
         # if torch.any(roll_cutoff):
         #     print(f"Episode ended due to high roll angle at timestep {self.common_step_counter}. Roll angles: {self.roll[roll_cutoff]}")
@@ -308,12 +308,13 @@ class Go2Robot(LeggedRobot):
         # print('self.reindex(self.dof_vel * self.obs_scales.dof_vel)',(self.reindex(self.dof_vel * self.obs_scales.dof_vel)).shape)
         # print('self.reindex(self.action_history_buf[:, -1])',(self.reindex(self.action_history_buf[:, -1])).shape)
         # print('self.reindex_feet(self.contact_filt.float()-0.5)',(self.reindex_feet(self.contact_filt.float()-0.5)).shape)
-
+        # print('(self.env_class != 0).float()',(self.env_class != 0).float())
         obs_buf = torch.cat((  self.base_lin_vel * self.obs_scales.lin_vel,
                                     self.base_ang_vel  * self.obs_scales.ang_vel,
                                     imu_obs,
                                     self.delta_yaw[:, None],
                                     self.delta_next_yaw[:, None],
+                                    
                                     self.commands[:, :1] * self.commands_scale,
                                     (self.env_class != 0).float(), 
                                     (self.env_class == 0).float(),
@@ -410,8 +411,8 @@ class Go2Robot(LeggedRobot):
         self.terrain.heightsamples[5*num_rows:6*num_rows, :] = stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=0.25).height_field_raw
         self.terrain.heightsamples[6*num_rows:7*num_rows, :] = stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=-0.25,init_height=850).height_field_raw
         #self.terrain.heightsamples[6*num_rows:7*num_rows,:48] = pyramid_stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=-0.5).height_field_raw
-        self.terrain.heightsamples[7*num_rows:8*num_rows,:] = stepping_stones_terrain(new_sub_terrain(), stone_size=1.25,
-                                                                        stone_distance=0.25, max_height=0.2, platform_size=0.,specific_stones=[(5, 30), (0, 30),(10, 30),(15, 30),(20, 30),(25, 30),(30, 30),(35, 30),(40, 30),(45, 30),(50, 30)], specific_heights=[0.2, 0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2]).height_field_raw
+        self.terrain.heightsamples[7*num_rows:8*num_rows,:] = stepping_stones_terrain(new_sub_terrain(), stone_size=1.0,
+                                                                        stone_distance=0.25, max_height=0.2, platform_size=0.,specific_stones=[], specific_heights=[]).height_field_raw
 
 
         # 计算 edge_mask
@@ -1025,8 +1026,8 @@ class Go2Robot(LeggedRobot):
             #TODO modify the inital position of the robots
             # self.env_origins[:,0:1] = torch_rand_float(90.5, 90.7, (self.num_envs,1), device=self.device)
             # self.env_origins[:,1:2] = torch_rand_float(1.66, 1.62, (self.num_envs,1), device=self.device)
-            self.env_origins[:,0:1] = torch_rand_float(76.0, 82.0, (self.num_envs,1), device=self.device)
-            self.env_origins[:,1:2] = torch_rand_float(2.5, 9.5, (self.num_envs,1), device=self.device)
+            self.env_origins[:,0:1] = torch_rand_float(1.0, 10.0, (self.num_envs,1), device=self.device)
+            self.env_origins[:,1:2] = torch_rand_float(1.0, 11.0, (self.num_envs,1), device=self.device)
 
             # put robots at the origins defined by the terrain
 
