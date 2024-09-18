@@ -101,7 +101,7 @@ class TaskRegistry():
                             headless=args.headless)
         return env, env_cfg
 
-    def make_alg_runner(self, env, name=None, args=None, train_cfg=None, log_root="default") -> Tuple[OnPolicyRunner, LeggedRobotCfgPPO]:
+    def make_alg_runner(self, env, name=None, args=None, train_cfg=None, log_root="default",resume_path=None) -> Tuple[OnPolicyRunner, LeggedRobotCfgPPO]:
         """ Creates the training algorithm  either from a registered namme or from the provided config file.
 
         Args:
@@ -150,11 +150,12 @@ class TaskRegistry():
         resume = train_cfg.runner.resume
 
         if resume:
-            # load previously trained model
-            if train_cfg.runner.model_dir:
-                resume_path = get_load_path(train_cfg.runner.model_dir, load_run="", checkpoint=train_cfg.runner.checkpoint)
-            else:
-                resume_path = get_load_path(log_root, load_run=train_cfg.runner.load_run, checkpoint=train_cfg.runner.checkpoint)
+            if resume_path is None:
+                # load previously trained model
+                if train_cfg.runner.model_dir:
+                    resume_path = get_load_path(train_cfg.runner.model_dir, load_run="", checkpoint=train_cfg.runner.checkpoint)
+                else:
+                    resume_path = get_load_path(log_root, load_run=train_cfg.runner.load_run, checkpoint=train_cfg.runner.checkpoint)
             print(f"Loading model from: {resume_path}")
             runner.load(resume_path)
         return runner, train_cfg, log_dir

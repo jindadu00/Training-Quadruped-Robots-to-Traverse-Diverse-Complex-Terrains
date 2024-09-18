@@ -115,27 +115,27 @@ class Go2RoughCfg( LeggedRobotCfg ):
             # step down
             [73.0, 7.85, 4.0], 
             # [74.0, 7.85, 3.5], 
-            [76.0, 7.85, 3.0], 
-            [78.0, 7.85, 2.5], 
-            [80.0, 7.85, 2.0], 
-            [82.0, 7.85, 1.5], 
-            [83.0, 7.85, 1.0], 
-            # quincuncial piles
-            [85.1, 7.85, 0.15], 
-            [86.4, 7.85, 0.1], 
-            [87.7, 7.85, 0.1],
-            [89.0, 7.85, 0.15], 
-            [90.3, 7.85, 0.15], 
-            [91.6, 7.85, 0.1], 
-            [92.9, 7.85, 0.1], 
-            [94.2, 7.85, 0.1], 
-            [95.5, 7.85, 0.1], 
-            [96.9, 7.85, 0.1], 
+            [75.0, 7.85, 3.0], 
+            # [78.0, 7.85, 2.5], 
+            # [80.0, 7.85, 2.0], 
+            # [82.0, 7.85, 1.5], 
+            # [83.0, 7.85, 1.0], 
+            # # quincuncial piles
+            # [85.1, 7.85, 0.15], 
+            # [86.4, 7.85, 0.1], 
+            # [87.7, 7.85, 0.1],
+            # [89.0, 7.85, 0.15], 
+            # [90.3, 7.85, 0.15], 
+            # [91.6, 7.85, 0.1], 
+            # [92.9, 7.85, 0.1], 
+            # [94.2, 7.85, 0.1], 
+            # [95.5, 7.85, 0.1], 
+            # [96.9, 7.85, 0.1], 
 
-            # final
-            [98.9, 7.85, 0.1], 
-            [103.9, 7.85, 0.1], 
-            [107.3, 7.85, 0.1], 
+            # # final
+            # [98.9, 7.85, 0.1], 
+            # [103.9, 7.85, 0.1], 
+            # [107.8, 7.85, 0.1], 
 
             # [99.4, 6.85, 0.1], 
             # # [100.0, 4.85, 0.1], 
@@ -187,7 +187,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
         resampling_time = 10. # time before command are changed[s]
         heading_command = True # if true: compute ang vel command from heading error
         class ranges:
-            lin_vel_x = [0.3, 2.0] # min max [m/s]
+            lin_vel_x = [1.0, 1.2] # min max [m/s]
             lin_vel_y = [0., 0.]   # min max [m/s]
             ang_vel_yaw = [0., 0.]    # min max [rad/s]
             heading = [0, 0]
@@ -238,7 +238,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
             dof_vel = -0.0
             # dof_acc = -0.0
             base_height = -0.000
-            feet_air_time = 0.5
+            feet_air_time = 1.0
             # collision = -0.0
             feet_stumble = -0.0
             stand_still = -0.001
@@ -252,7 +252,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
             # tracking rewards
             tracking_goal_vel = 2.0
             tracking_yaw = 0.5
-            reach_all_goal = 100000.0
+            reach_all_goal = 100.0
             # regularization rewards
             lin_vel_z = -0.3
             ang_vel_xy = -0.04
@@ -263,7 +263,8 @@ class Go2RoughCfg( LeggedRobotCfg ):
             delta_torques = -1.0e-7
             torques = -0.00001
             hip_pos = -0.6
-            dof_error = -0.04
+            dof_error = -0.001
+            symmetry = -0.5
             
             # jump
             # jump_up = 0.1
@@ -275,7 +276,7 @@ class Go2RoughCfg( LeggedRobotCfg ):
             # feet_height = -0.0
 
 
-            jump_up = 0.1
+            # jump_up = 0.1
             air_taitou = 0.0
             jump_lift_front_feet = 0.0
             jump_pitch = -0.0

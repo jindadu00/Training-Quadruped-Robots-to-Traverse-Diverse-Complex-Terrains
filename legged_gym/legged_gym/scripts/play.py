@@ -56,12 +56,25 @@ def play(args):
     train_cfg.runner.resume = True
     ppo_runner, train_cfg, dir_log = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=train_cfg)
     policy = ppo_runner.get_inference_policy(device=env.device)
-    
-    # export policy as a jit module (used to run it from C++)
-    if EXPORT_POLICY:
-        path = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.experiment_name, 'exported', 'policies')
-        export_policy_as_jit(ppo_runner.alg.actor_critic, path)
-        print('Exported policy as jit script to: ', path)
+
+
+    # load policy 1
+    train_cfg.runner.resume = True
+    ppo_runner1, train_cfg, dir_log = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=train_cfg, resume_path=None)
+    policy1 = ppo_runner1.get_inference_policy(device=env.device)
+
+    # load policy 2 (assumes another trained policy is available in different checkpoint)
+    train_cfg.runner.resume = True  # 重新加载另一份策略
+    ppo_runner2, train_cfg, dir_log = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=train_cfg, resume_path='/home/jinda/Desktop/competition/legged_gym/logs/origin_terrain/Sep16_23-22-03_from_Sep16_21-38-47/model_550.pt')
+    policy2 = ppo_runner2.get_inference_policy(device=env.device)
+  
+
+
+    # # export policy as a jit module (used to run it from C++)
+    # if EXPORT_POLICY:
+    #     path = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.experiment_name, 'exported', 'policies')
+    #     export_policy_as_jit(ppo_runner.alg.actor_critic, path)
+    #     print('Exported policy as jit script to: ', path)
 
     logger = Logger(env.dt)
     robot_index = 0 # which robot is used for logging
@@ -70,7 +83,7 @@ def play(args):
     stop_rew_log = env.max_episode_length + 1 # number of steps before print average episode rewards
     camera_position = np.array(env_cfg.viewer.pos, dtype=np.float64)
     # camera_position = np.array([50,0,0], dtype=np.float64)
-    camera_vel = np.array([1., 1., 0.])
+    camera_vel = np.array([1., 0., 0.])
     camera_direction = np.array(env_cfg.viewer.lookat) - np.array(env_cfg.viewer.pos)
     img_idx = 0
     #  get input 
@@ -79,7 +92,15 @@ def play(args):
 
 
     for i in range(10*int(env.max_episode_length)):
-        actions = policy(obs.detach())
+        # actions = policy(obs.detach())
+        # 根据 obs 或环境中的特定状态选择策略
+        # print('obs[0, 13]',obs[0, 13])
+        if obs[0, 13] < 0.5: # 此时是非梅花桩区域
+            # print('------action: 1------')
+            actions = policy1(obs.detach())
+        else:
+            # print('------action: 2------')
+            actions = policy2(obs.detach()) 
         obs, _, rews, dones, infos = env.step(actions.detach())
         if RECORD_FRAMES:
             if i % 2:
@@ -87,8 +108,12 @@ def play(args):
                 env.gym.write_viewer_image_to_file(env.viewer, filename)
                 img_idx += 1 
         if MOVE_CAMERA:
-            camera_position += camera_vel * env.dt
-            env.set_camera(camera_position, camera_position + camera_direction)
+            # camera_position += camera_vel * env.dt
+            camera_position = env.root_states[robot_index, :3].cpu().numpy()
+            env.set_camera(camera_position + np.array([-2., -2., 2.]),camera_position)
+
+            
+            # env.set_camera(camera_position, camera_position + camera_direction)
         base_height=env.root_states[robot_index, 2] - torch.mean(env.measured_heights[robot_index])
         ter_height=torch.mean(env.measured_heights[robot_index])
         
@@ -104,41 +129,41 @@ def play(args):
         # print('x:',env.root_states[:, 0])
         # print('y:',env.root_states[:, 1])
         # print(limbo_flag2)
-        if i < stop_state_log:
-            logger.log_states(
-                {
-                    'dof_pos_target': actions[robot_index, joint_index].item() * env.cfg.control.action_scale,
-                    'dof_pos': env.dof_pos[robot_index, joint_index].item(),
-                    'dof_vel': env.dof_vel[robot_index, joint_index].item(),
-                    'dof_torque': env.torques[robot_index, joint_index].item(),
-                    'command_x': env.commands[robot_index, 0].item(),
-                    'command_y': env.commands[robot_index, 1].item(),
-                    'command_yaw': env.commands[robot_index, 2].item(),
-                    'base_vel_x': env.base_lin_vel[robot_index, 0].item(),
-                    'base_vel_y': env.base_lin_vel[robot_index, 1].item(),
-                    'base_vel_z': env.base_lin_vel[robot_index, 2].item(),
-                    'base_vel_yaw': env.base_ang_vel[robot_index, 2].item(),
-                    'contact_forces_z': env.contact_forces[robot_index, env.feet_indices, 2].cpu().numpy(),
-                    'base_height': base_height.item(),  # Base height (z position)
-                    'ter_height': ter_height.item(),
-                    'base_pos_x': env.root_states[robot_index, 0].item(),   # X direction position
-                    'base_pos_y': env.root_states[robot_index, 1].item(),   # Y direction position
-                    'mean_square_dof_vel': torch.mean(torch.square(env.dof_vel[robot_index, :])).item(),
-                }
-            )
-        elif i==stop_state_log:
-            logger.plot_states()
-        if  0 < i < stop_rew_log:
-            if infos["episode"]:
-                num_episodes = torch.sum(env.reset_buf).item()
-                if num_episodes>0:
-                    logger.log_rewards(infos["episode"], num_episodes)
-        elif i==stop_rew_log:
-            logger.print_rewards()
+        # if i < stop_state_log:
+        #     logger.log_states(
+        #         {
+        #             'dof_pos_target': actions[robot_index, joint_index].item() * env.cfg.control.action_scale,
+        #             'dof_pos': env.dof_pos[robot_index, joint_index].item(),
+        #             'dof_vel': env.dof_vel[robot_index, joint_index].item(),
+        #             'dof_torque': env.torques[robot_index, joint_index].item(),
+        #             'command_x': env.commands[robot_index, 0].item(),
+        #             'command_y': env.commands[robot_index, 1].item(),
+        #             'command_yaw': env.commands[robot_index, 2].item(),
+        #             'base_vel_x': env.base_lin_vel[robot_index, 0].item(),
+        #             'base_vel_y': env.base_lin_vel[robot_index, 1].item(),
+        #             'base_vel_z': env.base_lin_vel[robot_index, 2].item(),
+        #             'base_vel_yaw': env.base_ang_vel[robot_index, 2].item(),
+        #             'contact_forces_z': env.contact_forces[robot_index, env.feet_indices, 2].cpu().numpy(),
+        #             'base_height': base_height.item(),  # Base height (z position)
+        #             'ter_height': ter_height.item(),
+        #             'base_pos_x': env.root_states[robot_index, 0].item(),   # X direction position
+        #             'base_pos_y': env.root_states[robot_index, 1].item(),   # Y direction position
+        #             'mean_square_dof_vel': torch.mean(torch.square(env.dof_vel[robot_index, :])).item(),
+        #         }
+        #     )
+        # elif i==stop_state_log:
+        #     logger.plot_states()
+        # if  0 < i < stop_rew_log:
+        #     if infos["episode"]:
+        #         num_episodes = torch.sum(env.reset_buf).item()
+        #         if num_episodes>0:
+        #             logger.log_rewards(infos["episode"], num_episodes)
+        # elif i==stop_rew_log:
+        #     logger.print_rewards()
 
 if __name__ == '__main__':
-    EXPORT_POLICY = True
+    EXPORT_POLICY = False
     RECORD_FRAMES = False
-    MOVE_CAMERA = False
+    MOVE_CAMERA = True
     args = get_args()
     play(args)

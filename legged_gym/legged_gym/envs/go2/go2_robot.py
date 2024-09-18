@@ -328,6 +328,7 @@ class Go2Robot(LeggedRobot):
                                     # self.reindex(self.action_history_buf[:, -1]),
                                     # self.reindex_feet(self.contact_filt.float()-0.5),
                                     ),dim=-1)
+        obs_buf[:, 11:13]=0
         # print('(self.env_class != 0).float()[:, None]',(self.env_class != 0).float()[:, None])
         # print('(self.env_class == 0).float()[:, None]',(self.env_class == 0).float()[:, None])
 
@@ -1365,6 +1366,8 @@ class Go2Robot(LeggedRobot):
         rew_airTime = torch.sum((self.feet_air_time - 0.5) * first_contact, dim=1) # reward only on first contact with the ground
         rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.1 #no reward for zero command
         self.feet_air_time *= ~contact_filt
+        self.feet_air_time*=~(self.feet_air_time>1.5)
+        # print('self.feet_air_time',(self.feet_air_time))
         return rew_airTime
 
 
@@ -1737,3 +1740,16 @@ class Go2Robot(LeggedRobot):
         # Penalize feet hitting vertical surfaces
         return torch.any(torch.norm(self.contact_forces[:, self.feet_indices, :2], dim=2) >\
              5 *torch.abs(self.contact_forces[:, self.feet_indices, 2]), dim=1)
+    
+    def _reward_symmetry(self):
+        # Penalize FR nad RL not symmetry
+
+        reward=torch.square(self.dof_pos[:, self.hip_indices[0]]-self.dof_pos[:, self.hip_indices[3]])
+        reward+=torch.square(self.dof_pos[:, self.hip_indices[1]]-self.dof_pos[:, self.hip_indices[2]])
+        reward+=torch.square(self.dof_pos[:, self.thigh_indices[0]]-self.dof_pos[:, self.thigh_indices[3]])
+        reward+=torch.square(self.dof_pos[:, self.thigh_indices[1]]-self.dof_pos[:, self.thigh_indices[2]])
+        reward+=torch.square(self.dof_pos[:, self.calf_indices[0]]-self.dof_pos[:, self.calf_indices[3]])
+        reward+=torch.square(self.dof_pos[:, self.calf_indices[1]]-self.dof_pos[:, self.calf_indices[2]])
+        return reward
+    
+
